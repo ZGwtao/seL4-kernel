@@ -175,7 +175,7 @@ add_compile_options(
     # Configure warnings
     #-----------------------------------
     -Wall
-    -Werror
+    # -Werror
     -Wstrict-prototypes
     -Wmissing-prototypes
     -Wnested-externs

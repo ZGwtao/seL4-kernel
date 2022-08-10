@@ -59,6 +59,89 @@ static inline void maybeDonateSchedContext(tcb_t *tcb, notification_t *ntfnPtr)
     }
 #endif
 
+void sendSignalBlockedBoundTCB(notification_t *ntfn, tcb_t *tcb, word_t badge)
+{
+    /* Send and start thread running */
+    cancelIPCShared(tcb);
+    setThreadState(tcb, ThreadState_Running);
+    setRegister(tcb, badgeRegister, badge);
+    MCS_DO_IF_SC(tcb, ntfn, {
+        possibleSwitchTo(tcb);
+    })
+}
+
+void sendSignalShared(notification_t *ntfnPtr, word_t badge)
+{
+    switch (notification_ptr_get_state(ntfnPtr)) {
+    case NtfnState_Idle: {
+#ifdef CONFIG_VTX
+        tcb_t *tcb = (tcb_t *)notification_ptr_get_ntfnBoundTCB(ntfnPtr);
+        /* Check if we are bound and that thread is waiting for a message */
+        if (tcb && thread_state_ptr_get_tsType(&tcb->tcbState) == ThreadState_RunningVM) {
+                fail("VTX not implemented");
+        }
+#endif
+        ntfn_set_active(ntfnPtr, badge);
+        break;
+    }
+    case NtfnState_Waiting: {
+        tcb_queue_t ntfn_queue;
+        tcb_t *dest;
+
+        ntfn_queue = ntfn_ptr_get_queue(ntfnPtr);
+        dest = ntfn_queue.head;
+
+        /* Haskell error "WaitingNtfn Notification must have non-empty queue" */
+        assert(dest);
+
+        /* Dequeue TCB */
+        ntfn_queue = tcbEPDequeue(dest, ntfn_queue);
+        ntfn_ptr_set_queue(ntfnPtr, ntfn_queue);
+
+        /* set the thread state to idle if the queue is empty */
+        if (!ntfn_queue.head) {
+            notification_ptr_set_state(ntfnPtr, NtfnState_Idle);
+        }
+
+        setThreadState(dest, ThreadState_Running);
+        setRegister(dest, badgeRegister, badge);
+        {
+            word_t affinity = dest->tcbAffinity;
+            scheduler_lock_acquire(affinity);
+            MCS_DO_IF_SC(dest, ntfnPtr, {
+                possibleSwitchTo(dest);
+            })
+            assert(affinity == dest->tcbAffinity);
+            scheduler_lock_release(affinity);
+        }
+
+
+        if (sc_sporadic(dest->tcbSchedContext)) {
+            /* We know that the receiver can't have the current SC
+             * as its own SC as this point as it should still be
+             * associated with the current thread.
+             * This check is added here to reduce the cost of
+             * proving this to be true as a short-term stop-gap. */
+            assert(dest->tcbSchedContext != NODE_STATE(ksCurSC));
+            if (dest->tcbSchedContext != NODE_STATE(ksCurSC)) {
+                refill_unblock_check(dest->tcbSchedContext);
+            }
+        }
+        break;
+    }
+
+    case NtfnState_Active: {
+        word_t badge2;
+
+        badge2 = notification_ptr_get_ntfnMsgIdentifier(ntfnPtr);
+        badge2 |= badge;
+
+        notification_ptr_set_ntfnMsgIdentifier(ntfnPtr, badge2);
+        break;
+    }
+    }
+}
+
 void sendSignal(notification_t *ntfnPtr, word_t badge)
 {
     switch (notification_ptr_get_state(ntfnPtr)) {
@@ -186,6 +269,48 @@ void sendSignal(notification_t *ntfnPtr, word_t badge)
     }
     }
 }
+
+#ifdef CONFIG_KERNEL_MCS
+void receiveSignalShared(tcb_t *thread, notification_t *ntfn_ptr, bool_t isBlocking)
+{
+    switch (notification_ptr_get_state(ntfn_ptr)) {
+    case NtfnState_Idle:
+    case NtfnState_Waiting:
+        if (isBlocking) {
+            tcb_queue_t ntfn_queue;
+            /* Block thread on notification object */
+            thread_state_ptr_set_tsType(&thread->tcbState, ThreadState_BlockedOnNotification);
+            thread_state_ptr_set_blockingObject(&thread->tcbState, NTFN_REF(ntfn_ptr));
+
+            scheduler_lock_acquire(getCurrentCPUIndex());
+            scheduleTCB(thread);
+
+            /* Enqueue TCB */
+            ntfn_queue = ntfn_ptr_get_queue(ntfn_ptr);
+            ntfn_queue = tcbEPAppend(thread, ntfn_queue);
+
+            notification_ptr_set_state(ntfn_ptr, NtfnState_Waiting);
+            ntfn_ptr_set_queue(ntfn_ptr, ntfn_queue);
+
+            maybeReturnSchedContext(ntfn_ptr, thread);
+            scheduler_lock_release(getCurrentCPUIndex());
+        } else {
+            doNBRecvFailedTransfer(thread);
+        }
+        break;
+    case NtfnState_Active:
+        setRegister(thread, badgeRegister, notification_ptr_get_ntfnMsgIdentifier(ntfn_ptr));
+        notification_ptr_set_state(ntfn_ptr, NtfnState_Idle);
+        maybeDonateSchedContext(thread, ntfn_ptr);
+        // If the SC has been donated to the current thread (in a reply_recv, send_recv scenario) then
+        // we may need to perform refill_unblock_check if the SC is becoming activated.
+        if (thread->tcbSchedContext != NODE_STATE(ksCurSC) && sc_sporadic(thread->tcbSchedContext)) {
+            refill_unblock_check(thread->tcbSchedContext);
+        }
+        break;
+    }
+}
+#endif
 
 void receiveSignal(tcb_t *thread, cap_t cap, bool_t isBlocking)
 {

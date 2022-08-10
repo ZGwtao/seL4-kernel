@@ -116,8 +116,9 @@ void VISIBLE NORETURN c_handle_interrupt(void)
     restore_user_context();
 }
 
-void NORETURN slowpath(syscall_t syscall)
+void NORETURN slowpathExclusive(syscall_t syscall)
 {
+    NODE_TAKE_WRITE_IF_READ_HELD;
     if (unlikely(syscall < SYSCALL_MIN || syscall > SYSCALL_MAX)) {
 #ifdef TRACK_KERNEL_ENTRIES
         ksKernelEntry.path = Entry_UnknownSyscall;
@@ -138,17 +139,75 @@ void NORETURN slowpath(syscall_t syscall)
     UNREACHABLE();
 }
 
+void NORETURN slowpathShared(syscall_t syscall)
+{
+    if (unlikely(syscall < SYSCALL_MIN || syscall > SYSCALL_MAX)) {
+        slowpathExclusive(syscall);
+    } else {
+        handleSyscallShared(syscall);
+    }
+
+    restore_user_context();
+    UNREACHABLE();
+}
+
+#ifdef CONFIG_KERNEL_MCS
+bool_t lock_shared_heuristic(word_t cptr, word_t msgInfo, syscall_t syscall)
+{
+    bool_t compatible_syscall = false;
+    if (syscall == SysSend) compatible_syscall = true;
+    if (syscall == SysNBWait) compatible_syscall = true;
+    if (syscall == SysWait) compatible_syscall = true;
+    if (syscall == SysRecv) compatible_syscall = true;
+    if (syscall == SysReplyRecv) compatible_syscall = true;
+    if (syscall == SysNBRecv) compatible_syscall = true;
+    if (syscall == SysNBSend) compatible_syscall = true;
+    if (syscall == SysCall) compatible_syscall = true;
+    if (syscall == SysYield) compatible_syscall = true;
+    if (syscall == SysNBSendRecv) compatible_syscall = true;
+    if (syscall == SysNBSendWait) compatible_syscall = true;
+    if (!compatible_syscall) {
+        return false;
+    }
+
+    if (seL4_MessageInfo_get_extraCaps(messageInfoFromWord(msgInfo)) != 0) {
+        return false;
+    }
+
+    return true;
+}
+#endif
+
 void VISIBLE c_handle_syscall(word_t cptr, word_t msgInfo, syscall_t syscall)
 {
-    NODE_LOCK_SYS;
+    NODE_STATE(ksSyscallNumber) = syscall;
 
+    bool_t shared = lock_shared_heuristic(cptr, msgInfo, syscall);
+
+#ifdef CONFIG_KERNEL_MCS
+    if (!shared) {
+#endif
+        NODE_LOCK_SYS;
+#ifdef CONFIG_KERNEL_MCS
+    } else {
+        NODE_READ_LOCK;
+    }
+#endif
     c_entry_hook();
 #ifdef TRACK_KERNEL_ENTRIES
     benchmark_debug_syscall_start(cptr, msgInfo, syscall);
     ksKernelEntry.is_fastpath = 0;
 #endif /* DEBUG */
 
-    slowpath(syscall);
+#ifdef CONFIG_KERNEL_MCS
+    if (!shared) {
+#endif
+        slowpathExclusive(syscall);
+#ifdef CONFIG_KERNEL_MCS
+    } else {
+        slowpathShared(syscall);
+    }
+#endif
     UNREACHABLE();
 }
 
@@ -156,7 +215,9 @@ void VISIBLE c_handle_syscall(word_t cptr, word_t msgInfo, syscall_t syscall)
 ALIGN(L1_CACHE_LINE_SIZE)
 void VISIBLE c_handle_fastpath_call(word_t cptr, word_t msgInfo)
 {
-    NODE_LOCK_SYS;
+    NODE_STATE(ksSyscallNumber) = SysCall;
+
+    NODE_READ_LOCK;
 
     c_entry_hook();
 #ifdef TRACK_KERNEL_ENTRIES
@@ -173,7 +234,9 @@ void VISIBLE c_handle_fastpath_call(word_t cptr, word_t msgInfo)
 ALIGN(L1_CACHE_LINE_SIZE)
 void VISIBLE c_handle_fastpath_signal(word_t cptr, word_t msgInfo)
 {
-    NODE_LOCK_SYS;
+    NODE_STATE(ksSyscallNumber) = SysSend;
+
+    NODE_READ_LOCK;
 
     c_entry_hook();
 #ifdef TRACK_KERNEL_ENTRIES
@@ -193,7 +256,10 @@ void VISIBLE c_handle_fastpath_reply_recv(word_t cptr, word_t msgInfo, word_t re
 void VISIBLE c_handle_fastpath_reply_recv(word_t cptr, word_t msgInfo)
 #endif
 {
-    NODE_LOCK_SYS;
+    NODE_STATE(ksSyscallNumber) = SysReplyRecv;
+
+    NODE_READ_LOCK;
+    // NODE_LOCK_SYS;
 
     c_entry_hook();
 #ifdef TRACK_KERNEL_ENTRIES

@@ -62,6 +62,7 @@ NODE_STATE_DECLARE(word_t, ksReadyQueuesL2Bitmap[CONFIG_NUM_DOMAINS][L2_BITMAP_S
 NODE_STATE_DECLARE(tcb_t, *ksCurThread);
 NODE_STATE_DECLARE(tcb_t, *ksIdleThread);
 NODE_STATE_DECLARE(tcb_t, *ksSchedulerAction);
+NODE_STATE_DECLARE(extra_caps_t, ksCurrentExtraCaps);
 
 #ifdef CONFIG_KERNEL_MCS
 NODE_STATE_DECLARE(tcb_t, *ksReleaseHead);
@@ -70,6 +71,7 @@ NODE_STATE_DECLARE(time_t, ksCurTime);
 NODE_STATE_DECLARE(bool_t, ksReprogram);
 NODE_STATE_DECLARE(sched_context_t, *ksCurSC);
 NODE_STATE_DECLARE(sched_context_t, *ksIdleSC);
+NODE_STATE_DECLARE(word_t, ksSyscallNumber);
 #endif
 
 #ifdef CONFIG_HAVE_FPU

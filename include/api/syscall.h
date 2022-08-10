@@ -30,6 +30,10 @@
 #endif
 
 exception_t handleSyscall(syscall_t syscall);
+#ifdef CONFIG_KERNEL_MCS
+exception_t handleSyscallShared(syscall_t syscall);
+void retry_syscall_exclusive(void);
+#endif
 exception_t handleInterruptEntry(void);
 exception_t handleUnknownSyscall(word_t w);
 exception_t handleUserLevelFault(word_t w_a, word_t w_b);
@@ -45,5 +49,4 @@ static inline word_t PURE getSyscallArg(word_t i, word_t *ipc_buffer)
     return ipc_buffer[i + 1];
 }
 
-extern extra_caps_t current_extra_caps;
 

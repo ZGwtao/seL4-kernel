@@ -11,6 +11,8 @@
 
 clh_lock_t big_kernel_lock ALIGN(L1_CACHE_LINE_SIZE);
 
+word_t scheduler_locks[CONFIG_MAX_NUM_NODES];
+
 BOOT_CODE void clh_lock_init(void)
 {
     for (int i = 0; i < CONFIG_MAX_NUM_NODES; i++) {

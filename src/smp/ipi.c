@@ -58,6 +58,63 @@ void ipiStallCoreCallback(bool_t irqPath)
             arch_pause();
         }
 
+        __atomic_thread_fence(__ATOMIC_ACQUIRE);
+
+        for (word_t node = 0; node < CONFIG_MAX_NUM_NODES; node++) {
+            struct node_read_state *s = &big_kernel_lock.node_read_state[node];
+            s->w_flag = true;
+            s->turn = R;
+        }
+
+        __atomic_thread_fence(__ATOMIC_ACQ_REL);
+
+        for (word_t node = 0; node < CONFIG_MAX_NUM_NODES; node++) {
+            struct node_read_state *s = &big_kernel_lock.node_read_state[node];
+            while (s->r_flag && s->turn == R) {
+                __atomic_thread_fence(__ATOMIC_ACQUIRE);
+            }
+        }
+
+        /* make sure no resource access passes from this point */
+        asm volatile("" ::: "memory");
+
+        /* Start idle thread to capture the pending IPI */
+        activateThread();
+        restore_user_context();
+    } else if (is_self_waiting_on_read_lock()) {
+        if (thread_state_ptr_get_tsType(&NODE_STATE(ksCurThread)->tcbState) == ThreadState_Running) {
+            setThreadState(NODE_STATE(ksCurThread), ThreadState_Restart);
+        }
+
+        SCHED_ENQUEUE_CURRENT_TCB;
+        switchToIdleThread();
+#ifdef CONFIG_KERNEL_MCS
+        commitTime();
+        NODE_STATE(ksCurSC) = NODE_STATE(ksIdleThread)->tcbSchedContext;
+#endif
+        NODE_STATE(ksSchedulerAction) = SchedulerAction_ResumeCurrentThread;
+
+        /* Let the cpu requesting this IPI to continue while we waiting on lock */
+        big_kernel_lock.node_owners[getCurrentCPUIndex()].ipi = 0;
+#ifdef CONFIG_ARCH_RISCV
+        ipi_clear_irq(irq_remote_call_ipi);
+#endif
+        ipi_wait(totalCoreBarrier);
+
+        struct node_read_state *s = &big_kernel_lock.node_read_state[getCurrentCPUIndex()];
+
+        while (s->w_flag && s->turn == W) {
+            __atomic_thread_fence(__ATOMIC_ACQUIRE);
+            if (clh_is_ipi_pending(getCurrentCPUIndex())) {
+                /* Multiple calls for similar reason could result in stack overflow */
+                assert((IpiRemoteCall_t)remoteCall != IpiRemoteCall_Stall);
+                handleIPI(CORE_IRQ_TO_IRQT(getCurrentCPUIndex(), irq_remote_call_ipi), irqPath);
+            }
+            arch_pause();
+        }
+        s->waiting_on_read_lock = false;
+        s->own_read_lock = true;
+
         /* make sure no resource access passes from this point */
         asm volatile("" ::: "memory");
 
@@ -69,6 +126,7 @@ void ipiStallCoreCallback(bool_t irqPath)
          * inside the lock while waiting to grab the lock for handling pending interrupt.
          * In latter case, we return to the 'clh_lock_acquire' to grab the lock and
          * handle the pending interrupt. Its valid as interrups are async events! */
+
         SCHED_ENQUEUE_CURRENT_TCB;
         switchToIdleThread();
 #ifdef CONFIG_KERNEL_MCS
@@ -95,6 +153,8 @@ void handleIPI(irq_t irq, bool_t irqPath)
 
 void doRemoteMaskOp(IpiRemoteCall_t func, word_t data1, word_t data2, word_t data3, word_t mask)
 {
+    assert(clh_is_self_in_queue());
+
     /* make sure the current core is not set in the mask */
     mask &= ~BIT(getCurrentCPUIndex());
 
@@ -102,6 +162,8 @@ void doRemoteMaskOp(IpiRemoteCall_t func, word_t data1, word_t data2, word_t dat
      * newly created PD which has not been run yet. Guard against them! */
     if (mask != 0) {
         init_ipi_args(func, data1, data2, data3, mask);
+
+        assert(clh_is_self_in_queue());
 
         /* make sure no resource access passes from this point */
         asm volatile("" ::: "memory");

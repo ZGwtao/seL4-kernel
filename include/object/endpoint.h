@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2014, General Dynamics C4 Systems
  *
@@ -26,9 +27,13 @@ static inline void ep_ptr_set_queue(endpoint_t *epptr, tcb_queue_t queue)
 }
 
 #ifdef CONFIG_KERNEL_MCS
+void sendIPCShared(bool_t blocking, bool_t do_call, word_t badge,
+             bool_t canGrant, bool_t canGrantReply, bool_t canDonate, tcb_t *thread,
+             endpoint_t *epptr);
 void sendIPC(bool_t blocking, bool_t do_call, word_t badge,
              bool_t canGrant, bool_t canGrantReply, bool_t canDonate, tcb_t *thread,
              endpoint_t *epptr);
+void receiveIPCShared(tcb_t *thread, endpoint_t *epptr, bool_t isBlocking, reply_t *replyPtr);
 void receiveIPC(tcb_t *thread, cap_t cap, bool_t isBlocking, cap_t replyCPtr);
 void reorderEP(endpoint_t *epptr, tcb_t *thread);
 #else
@@ -38,6 +43,7 @@ void sendIPC(bool_t blocking, bool_t do_call, word_t badge,
 void receiveIPC(tcb_t *thread, cap_t cap, bool_t isBlocking);
 #endif
 void cancelIPC(tcb_t *tptr);
+void cancelIPCShared(tcb_t *tptr);
 void cancelAllIPC(endpoint_t *epptr);
 void cancelBadgedSends(endpoint_t *epptr, word_t badge);
 void replyFromKernel_error(tcb_t *thread);
