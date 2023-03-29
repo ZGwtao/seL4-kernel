@@ -52,13 +52,13 @@ exception_t decodeCNodeInvocation(word_t invLabel, word_t length, cap_t cap,
 
     if (invLabel < CNodeRevoke || invLabel > CNODE_LAST_INVOCATION) {
         userError("CNodeCap: Illegal Operation attempted.");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (length < 2) {
         userError("CNode operation: Truncated message.");
-        current_syscall_error.type = seL4_TruncatedMessage;
+        NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
     }
     index = getSyscallArg(0, buffer);
@@ -82,7 +82,7 @@ exception_t decodeCNodeInvocation(word_t invLabel, word_t length, cap_t cap,
 
         if (length < 4 || NODE_STATE(ksCurrentExtraCaps).excaprefs[0] == NULL) {
             userError("CNode Copy/Mint/Move/Mutate: Truncated message.");
-            current_syscall_error.type = seL4_TruncatedMessage;
+            NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
             return EXCEPTION_SYSCALL_ERROR;
         }
         srcIndex = getSyscallArg(2, buffer);
@@ -105,9 +105,9 @@ exception_t decodeCNodeInvocation(word_t invLabel, word_t length, cap_t cap,
 
         if (cap_get_capType(srcSlot->cap) == cap_null_cap) {
             userError("CNode Copy/Mint/Move/Mutate: Source slot invalid or empty.");
-            current_syscall_error.type = seL4_FailedLookup;
-            current_syscall_error.failedLookupWasSource = 1;
-            current_lookup_fault =
+            NODE_STATE(ksCurSyscallError).type = seL4_FailedLookup;
+            NODE_STATE(ksCurSyscallError).failedLookupWasSource = 1;
+            NODE_STATE(ksCurLookupFault) =
                 lookup_fault_missing_capability_new(srcDepth);
             return EXCEPTION_SYSCALL_ERROR;
         }
@@ -117,7 +117,7 @@ exception_t decodeCNodeInvocation(word_t invLabel, word_t length, cap_t cap,
 
             if (length < 5) {
                 userError("Truncated message for CNode Copy operation.");
-                current_syscall_error.type = seL4_TruncatedMessage;
+                NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
                 return EXCEPTION_SYSCALL_ERROR;
             }
 
@@ -136,7 +136,7 @@ exception_t decodeCNodeInvocation(word_t invLabel, word_t length, cap_t cap,
         case CNodeMint:
             if (length < 6) {
                 userError("CNode Mint: Truncated message.");
-                current_syscall_error.type = seL4_TruncatedMessage;
+                NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
                 return EXCEPTION_SYSCALL_ERROR;
             }
 
@@ -163,7 +163,7 @@ exception_t decodeCNodeInvocation(word_t invLabel, word_t length, cap_t cap,
         case CNodeMutate:
             if (length < 5) {
                 userError("CNode Mutate: Truncated message.");
-                current_syscall_error.type = seL4_TruncatedMessage;
+                NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
                 return EXCEPTION_SYSCALL_ERROR;
             }
 
@@ -180,7 +180,7 @@ exception_t decodeCNodeInvocation(word_t invLabel, word_t length, cap_t cap,
 
         if (cap_get_capType(newCap) == cap_null_cap) {
             userError("CNode Copy/Mint/Move/Mutate: Mutated cap would be invalid.");
-            current_syscall_error.type = seL4_IllegalOperation;
+            NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
             return EXCEPTION_SYSCALL_ERROR;
         }
 
@@ -222,7 +222,7 @@ exception_t decodeCNodeInvocation(word_t invLabel, word_t length, cap_t cap,
 
         if (!hasCancelSendRights(destCap)) {
             userError("CNode CancelBadgedSends: Target cap invalid.");
-            current_syscall_error.type = seL4_IllegalOperation;
+            NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
             return EXCEPTION_SYSCALL_ERROR;
         }
         setThreadState(NODE_STATE(ksCurThread), ThreadState_Restart);
@@ -237,7 +237,7 @@ exception_t decodeCNodeInvocation(word_t invLabel, word_t length, cap_t cap,
 
         if (length < 8 || NODE_STATE(ksCurrentExtraCaps).excaprefs[0] == NULL
             || NODE_STATE(ksCurrentExtraCaps).excaprefs[1] == NULL) {
-            current_syscall_error.type = seL4_TruncatedMessage;
+            NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
             return EXCEPTION_SYSCALL_ERROR;
         }
         pivotNewData = getSyscallArg(2, buffer);
@@ -264,7 +264,7 @@ exception_t decodeCNodeInvocation(word_t invLabel, word_t length, cap_t cap,
 
         if (pivotSlot == srcSlot || pivotSlot == destSlot) {
             userError("CNode Rotate: Pivot slot the same as source or dest slot.");
-            current_syscall_error.type = seL4_IllegalOperation;
+            NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
             return EXCEPTION_SYSCALL_ERROR;
         }
 
@@ -276,16 +276,16 @@ exception_t decodeCNodeInvocation(word_t invLabel, word_t length, cap_t cap,
         }
 
         if (cap_get_capType(srcSlot->cap) == cap_null_cap) {
-            current_syscall_error.type = seL4_FailedLookup;
-            current_syscall_error.failedLookupWasSource = 1;
-            current_lookup_fault = lookup_fault_missing_capability_new(srcDepth);
+            NODE_STATE(ksCurSyscallError).type = seL4_FailedLookup;
+            NODE_STATE(ksCurSyscallError).failedLookupWasSource = 1;
+            NODE_STATE(ksCurLookupFault) = lookup_fault_missing_capability_new(srcDepth);
             return EXCEPTION_SYSCALL_ERROR;
         }
 
         if (cap_get_capType(pivotSlot->cap) == cap_null_cap) {
-            current_syscall_error.type = seL4_FailedLookup;
-            current_syscall_error.failedLookupWasSource = 0;
-            current_lookup_fault = lookup_fault_missing_capability_new(pivotDepth);
+            NODE_STATE(ksCurSyscallError).type = seL4_FailedLookup;
+            NODE_STATE(ksCurSyscallError).failedLookupWasSource = 0;
+            NODE_STATE(ksCurLookupFault) = lookup_fault_missing_capability_new(pivotDepth);
             return EXCEPTION_SYSCALL_ERROR;
         }
 
@@ -294,13 +294,13 @@ exception_t decodeCNodeInvocation(word_t invLabel, word_t length, cap_t cap,
 
         if (cap_get_capType(newSrcCap) == cap_null_cap) {
             userError("CNode Rotate: Source cap invalid.");
-            current_syscall_error.type = seL4_IllegalOperation;
+            NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
             return EXCEPTION_SYSCALL_ERROR;
         }
 
         if (cap_get_capType(newPivotCap) == cap_null_cap) {
             userError("CNode Rotate: Pivot cap invalid.");
-            current_syscall_error.type = seL4_IllegalOperation;
+            NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
             return EXCEPTION_SYSCALL_ERROR;
         }
 
@@ -819,7 +819,7 @@ exception_t ensureNoChildren(cte_t *slot)
 
         next = CTE_PTR(mdb_node_get_mdbNext(slot->cteMDBNode));
         if (isMDBParentOf(slot, next)) {
-            current_syscall_error.type = seL4_RevokeFirst;
+            NODE_STATE(ksCurSyscallError).type = seL4_RevokeFirst;
             return EXCEPTION_SYSCALL_ERROR;
         }
     }
@@ -830,7 +830,7 @@ exception_t ensureNoChildren(cte_t *slot)
 exception_t ensureEmptySlot(cte_t *slot)
 {
     if (cap_get_capType(slot->cap) != cap_null_cap) {
-        current_syscall_error.type = seL4_DeleteFirst;
+        NODE_STATE(ksCurSyscallError).type = seL4_DeleteFirst;
         return EXCEPTION_SYSCALL_ERROR;
     }
 

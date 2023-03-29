@@ -43,14 +43,14 @@ exception_t decodeUntypedInvocation(word_t invLabel, word_t length, cte_t *slot,
     /* Ensure operation is valid. */
     if (invLabel != UntypedRetype) {
         userError("Untyped cap: Illegal operation attempted.");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     /* Ensure message length valid. */
     if (length < 6 || NODE_STATE(ksCurrentExtraCaps).excaprefs[0] == NULL) {
         userError("Untyped invocation: Truncated message.");
-        current_syscall_error.type = seL4_TruncatedMessage;
+        NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -67,8 +67,8 @@ exception_t decodeUntypedInvocation(word_t invLabel, word_t length, cte_t *slot,
     /* Is the requested object type valid? */
     if (newType >= seL4_ObjectTypeCount) {
         userError("Untyped Retype: Invalid object type.");
-        current_syscall_error.type = seL4_InvalidArgument;
-        current_syscall_error.invalidArgumentNumber = 0;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidArgument;
+        NODE_STATE(ksCurSyscallError).invalidArgumentNumber = 0;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -79,33 +79,33 @@ exception_t decodeUntypedInvocation(word_t invLabel, word_t length, cte_t *slot,
        did not happen. userObjSize will always need to be less than wordBits. */
     if (userObjSize >= wordBits || objectSize > seL4_MaxUntypedBits) {
         userError("Untyped Retype: Invalid object size.");
-        current_syscall_error.type = seL4_RangeError;
-        current_syscall_error.rangeErrorMin = 0;
-        current_syscall_error.rangeErrorMax = seL4_MaxUntypedBits;
+        NODE_STATE(ksCurSyscallError).type = seL4_RangeError;
+        NODE_STATE(ksCurSyscallError).rangeErrorMin = 0;
+        NODE_STATE(ksCurSyscallError).rangeErrorMax = seL4_MaxUntypedBits;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     /* If the target object is a CNode, is it at least size 1? */
     if (newType == seL4_CapTableObject && userObjSize == 0) {
         userError("Untyped Retype: Requested CapTable size too small.");
-        current_syscall_error.type = seL4_InvalidArgument;
-        current_syscall_error.invalidArgumentNumber = 1;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidArgument;
+        NODE_STATE(ksCurSyscallError).invalidArgumentNumber = 1;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     /* If the target object is a Untyped, is it at least size 4? */
     if (newType == seL4_UntypedObject && userObjSize < seL4_MinUntypedBits) {
         userError("Untyped Retype: Requested UntypedItem size too small.");
-        current_syscall_error.type = seL4_InvalidArgument;
-        current_syscall_error.invalidArgumentNumber = 1;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidArgument;
+        NODE_STATE(ksCurSyscallError).invalidArgumentNumber = 1;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
 #ifdef CONFIG_KERNEL_MCS
     if (newType == seL4_SchedContextObject && userObjSize < seL4_MinSchedContextBits) {
         userError("Untyped retype: Requested a scheduling context too small.");
-        current_syscall_error.type = seL4_InvalidArgument;
-        current_syscall_error.invalidArgumentNumber = 1;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidArgument;
+        NODE_STATE(ksCurSyscallError).invalidArgumentNumber = 1;
         return EXCEPTION_SYSCALL_ERROR;
     }
 #endif
@@ -126,9 +126,9 @@ exception_t decodeUntypedInvocation(word_t invLabel, word_t length, cte_t *slot,
     /* Is the destination actually a CNode? */
     if (cap_get_capType(nodeCap) != cap_cnode_cap) {
         userError("Untyped Retype: Destination cap invalid or read-only.");
-        current_syscall_error.type = seL4_FailedLookup;
-        current_syscall_error.failedLookupWasSource = 0;
-        current_lookup_fault = lookup_fault_missing_capability_new(nodeDepth);
+        NODE_STATE(ksCurSyscallError).type = seL4_FailedLookup;
+        NODE_STATE(ksCurSyscallError).failedLookupWasSource = 0;
+        NODE_STATE(ksCurLookupFault) = lookup_fault_missing_capability_new(nodeDepth);
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -137,24 +137,24 @@ exception_t decodeUntypedInvocation(word_t invLabel, word_t length, cte_t *slot,
     if (nodeOffset > nodeSize - 1) {
         userError("Untyped Retype: Destination node offset #%d too large.",
                   (int)nodeOffset);
-        current_syscall_error.type = seL4_RangeError;
-        current_syscall_error.rangeErrorMin = 0;
-        current_syscall_error.rangeErrorMax = nodeSize - 1;
+        NODE_STATE(ksCurSyscallError).type = seL4_RangeError;
+        NODE_STATE(ksCurSyscallError).rangeErrorMin = 0;
+        NODE_STATE(ksCurSyscallError).rangeErrorMax = nodeSize - 1;
         return EXCEPTION_SYSCALL_ERROR;
     }
     if (nodeWindow < 1 || nodeWindow > CONFIG_RETYPE_FAN_OUT_LIMIT) {
         userError("Untyped Retype: Number of requested objects (%d) too small or large.",
                   (int)nodeWindow);
-        current_syscall_error.type = seL4_RangeError;
-        current_syscall_error.rangeErrorMin = 1;
-        current_syscall_error.rangeErrorMax = CONFIG_RETYPE_FAN_OUT_LIMIT;
+        NODE_STATE(ksCurSyscallError).type = seL4_RangeError;
+        NODE_STATE(ksCurSyscallError).rangeErrorMin = 1;
+        NODE_STATE(ksCurSyscallError).rangeErrorMax = CONFIG_RETYPE_FAN_OUT_LIMIT;
         return EXCEPTION_SYSCALL_ERROR;
     }
     if (nodeWindow > nodeSize - nodeOffset) {
         userError("Untyped Retype: Requested destination window overruns size of node.");
-        current_syscall_error.type = seL4_RangeError;
-        current_syscall_error.rangeErrorMin = 1;
-        current_syscall_error.rangeErrorMax = nodeSize - nodeOffset;
+        NODE_STATE(ksCurSyscallError).type = seL4_RangeError;
+        NODE_STATE(ksCurSyscallError).rangeErrorMin = 1;
+        NODE_STATE(ksCurSyscallError).rangeErrorMax = nodeSize - nodeOffset;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -207,8 +207,8 @@ exception_t decodeUntypedInvocation(word_t invLabel, word_t length, cte_t *slot,
                   (word_t)nodeWindow,
                   (objectSize >= wordBits ? -1 : (1ul << objectSize)),
                   (word_t)(untypedFreeBytes));
-        current_syscall_error.type = seL4_NotEnoughMemory;
-        current_syscall_error.memoryLeft = untypedFreeBytes;
+        NODE_STATE(ksCurSyscallError).type = seL4_NotEnoughMemory;
+        NODE_STATE(ksCurSyscallError).memoryLeft = untypedFreeBytes;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -216,8 +216,8 @@ exception_t decodeUntypedInvocation(word_t invLabel, word_t length, cte_t *slot,
     if ((deviceMemory && !Arch_isFrameType(newType))
         && newType != seL4_UntypedObject) {
         userError("Untyped Retype: Creating kernel objects with device untyped");
-        current_syscall_error.type = seL4_InvalidArgument;
-        current_syscall_error.invalidArgumentNumber = 1;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidArgument;
+        NODE_STATE(ksCurSyscallError).invalidArgumentNumber = 1;
         return EXCEPTION_SYSCALL_ERROR;
     }
 

@@ -108,36 +108,36 @@ exception_t ioapic_decode_map_pin_to_vector(word_t ioapic, word_t pin, word_t le
 {
     if (num_ioapics == 0) {
         userError("System has no IOAPICs");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
     if (ioapic >= num_ioapics) {
         userError("Invalid IOAPIC %ld, only have %ld", (long)ioapic, (long)num_ioapics);
-        current_syscall_error.type = seL4_RangeError;
-        current_syscall_error.rangeErrorMin = 0;
-        current_syscall_error.rangeErrorMax = num_ioapics - 1;
+        NODE_STATE(ksCurSyscallError).type = seL4_RangeError;
+        NODE_STATE(ksCurSyscallError).rangeErrorMin = 0;
+        NODE_STATE(ksCurSyscallError).rangeErrorMax = num_ioapics - 1;
         return EXCEPTION_SYSCALL_ERROR;
     }
     if (pin >= IOAPIC_IRQ_LINES) {
         userError("Invalid IOAPIC pin %ld, there are %d pins", (long)pin, IOAPIC_IRQ_LINES);
-        current_syscall_error.type = seL4_RangeError;
-        current_syscall_error.rangeErrorMin = 0;
-        current_syscall_error.rangeErrorMax = IOAPIC_IRQ_LINES - 1;
+        NODE_STATE(ksCurSyscallError).type = seL4_RangeError;
+        NODE_STATE(ksCurSyscallError).rangeErrorMin = 0;
+        NODE_STATE(ksCurSyscallError).rangeErrorMax = IOAPIC_IRQ_LINES - 1;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (level != 0 && level != 1) {
         userError("Level should be 0 or 1, not %d", (int)level);
-        current_syscall_error.type = seL4_RangeError;
-        current_syscall_error.rangeErrorMin = 0;
-        current_syscall_error.rangeErrorMax = 1;
+        NODE_STATE(ksCurSyscallError).type = seL4_RangeError;
+        NODE_STATE(ksCurSyscallError).rangeErrorMin = 0;
+        NODE_STATE(ksCurSyscallError).rangeErrorMax = 1;
         return EXCEPTION_SYSCALL_ERROR;
     }
     if (polarity != 0 && polarity != 1) {
         userError("Polarity should be 0 or 1, not %d", (int)polarity);
-        current_syscall_error.type = seL4_RangeError;
-        current_syscall_error.rangeErrorMin = 0;
-        current_syscall_error.rangeErrorMax = 1;
+        NODE_STATE(ksCurSyscallError).type = seL4_RangeError;
+        NODE_STATE(ksCurSyscallError).rangeErrorMin = 0;
+        NODE_STATE(ksCurSyscallError).rangeErrorMax = 1;
         return EXCEPTION_SYSCALL_ERROR;
     }
     return EXCEPTION_NONE;

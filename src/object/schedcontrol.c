@@ -80,13 +80,13 @@ static exception_t decodeSchedControl_ConfigureFlags(word_t length, cap_t cap, w
 {
     if (NODE_STATE(ksCurrentExtraCaps).excaprefs[0] == NULL) {
         userError("SchedControl_ConfigureFlags: Truncated message.");
-        current_syscall_error.type = seL4_TruncatedMessage;
+        NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (length < (TIME_ARG_SIZE * 2) + 3) {
         userError("SchedControl_configureFlags: truncated message.");
-        current_syscall_error.type = seL4_TruncatedMessage;
+        NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -101,42 +101,42 @@ static exception_t decodeSchedControl_ConfigureFlags(word_t length, cap_t cap, w
     cap_t targetCap = NODE_STATE(ksCurrentExtraCaps).excaprefs[0]->cap;
     if (unlikely(cap_get_capType(targetCap) != cap_sched_context_cap)) {
         userError("SchedControl_ConfigureFlags: target cap not a scheduling context cap");
-        current_syscall_error.type = seL4_InvalidCapability;
-        current_syscall_error.invalidCapNumber = 1;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 1;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (budget_us > MAX_PERIOD_US || budget_ticks < MIN_BUDGET) {
         userError("SchedControl_ConfigureFlags: budget out of range.");
-        current_syscall_error.type = seL4_RangeError;
-        current_syscall_error.rangeErrorMin = MIN_BUDGET_US;
-        current_syscall_error.rangeErrorMax = MAX_PERIOD_US;
+        NODE_STATE(ksCurSyscallError).type = seL4_RangeError;
+        NODE_STATE(ksCurSyscallError).rangeErrorMin = MIN_BUDGET_US;
+        NODE_STATE(ksCurSyscallError).rangeErrorMax = MAX_PERIOD_US;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (period_us > MAX_PERIOD_US || period_ticks < MIN_BUDGET) {
         userError("SchedControl_ConfigureFlags: period out of range.");
-        current_syscall_error.type = seL4_RangeError;
-        current_syscall_error.rangeErrorMin = MIN_BUDGET_US;
-        current_syscall_error.rangeErrorMax = MAX_PERIOD_US;
+        NODE_STATE(ksCurSyscallError).type = seL4_RangeError;
+        NODE_STATE(ksCurSyscallError).rangeErrorMin = MIN_BUDGET_US;
+        NODE_STATE(ksCurSyscallError).rangeErrorMax = MAX_PERIOD_US;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (budget_ticks > period_ticks) {
         userError("SchedControl_ConfigureFlags: budget must be <= period");
-        current_syscall_error.type = seL4_RangeError;
-        current_syscall_error.rangeErrorMin = MIN_BUDGET_US;
-        current_syscall_error.rangeErrorMax = period_us;
+        NODE_STATE(ksCurSyscallError).type = seL4_RangeError;
+        NODE_STATE(ksCurSyscallError).rangeErrorMin = MIN_BUDGET_US;
+        NODE_STATE(ksCurSyscallError).rangeErrorMax = period_us;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (extra_refills + MIN_REFILLS > refill_absolute_max(targetCap)) {
-        current_syscall_error.type = seL4_RangeError;
-        current_syscall_error.rangeErrorMin = 0;
-        current_syscall_error.rangeErrorMax = refill_absolute_max(targetCap) - MIN_REFILLS;
+        NODE_STATE(ksCurSyscallError).type = seL4_RangeError;
+        NODE_STATE(ksCurSyscallError).rangeErrorMin = 0;
+        NODE_STATE(ksCurSyscallError).rangeErrorMax = refill_absolute_max(targetCap) - MIN_REFILLS;
         userError("Max refills invalid, got %lu, max %lu",
                   extra_refills,
-                  current_syscall_error.rangeErrorMax);
+                  NODE_STATE(ksCurSyscallError).rangeErrorMax);
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -157,7 +157,7 @@ exception_t decodeSchedControlInvocation(word_t label, cap_t cap, word_t length,
         return  decodeSchedControl_ConfigureFlags(length, cap, buffer);
     default:
         userError("SchedControl invocation: Illegal operation attempted.");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 }

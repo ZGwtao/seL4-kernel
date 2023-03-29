@@ -582,7 +582,7 @@ static findVSpaceForASID_ret_t findVSpaceForASID(asid_t asid)
 
     asid_map = findMapForASID(asid);
     if (asid_map_get_type(asid_map) != asid_map_asid_map_vspace) {
-        current_lookup_fault = lookup_fault_invalid_root_new();
+        NODE_STATE(ksCurLookupFault) = lookup_fault_invalid_root_new();
 
         ret.vspace_root = NULL;
         ret.status = EXCEPTION_LOOKUP_FAULT;
@@ -628,19 +628,19 @@ exception_t checkValidIPCBuffer(vptr_t vptr, cap_t cap)
 {
     if (cap_get_capType(cap) != cap_frame_cap) {
         userError("IPC Buffer is an invalid cap.");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (unlikely(cap_frame_cap_get_capFIsDevice(cap))) {
         userError("Specifying a device frame as an IPC buffer is not permitted.");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (!IS_ALIGNED(vptr, seL4_IPCBufferSizeBits)) {
         userError("IPC Buffer vaddr 0x%x is not aligned.", (int)vptr);
-        current_syscall_error.type = seL4_AlignmentError;
+        NODE_STATE(ksCurSyscallError).type = seL4_AlignmentError;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -672,7 +672,7 @@ static lookupPUDSlot_ret_t lookupPUDSlot(vspace_root_t *vspace, vptr_t vptr)
     lookupPGDSlot_ret_t pgdSlot = lookupPGDSlot(vspace, vptr);
 
     if (!pgde_pgde_pud_ptr_get_present(pgdSlot.pgdSlot)) {
-        current_lookup_fault = lookup_fault_missing_capability_new(PGD_INDEX_OFFSET);
+        NODE_STATE(ksCurLookupFault) = lookup_fault_missing_capability_new(PGD_INDEX_OFFSET);
 
         ret.pudSlot = NULL;
         ret.status = EXCEPTION_LOOKUP_FAULT;
@@ -703,7 +703,7 @@ static lookupPDSlot_ret_t lookupPDSlot(vspace_root_t *vspace, vptr_t vptr)
         return ret;
     }
     if (!pude_pude_pd_ptr_get_present(pudSlot.pudSlot)) {
-        current_lookup_fault = lookup_fault_missing_capability_new(PUD_INDEX_OFFSET);
+        NODE_STATE(ksCurLookupFault) = lookup_fault_missing_capability_new(PUD_INDEX_OFFSET);
 
         ret.pdSlot = NULL;
         ret.status = EXCEPTION_LOOKUP_FAULT;
@@ -733,7 +733,7 @@ static lookupPTSlot_ret_t lookupPTSlot(vspace_root_t *vspace, vptr_t vptr)
         return ret;
     }
     if (!pde_pde_small_ptr_get_present(pdSlot.pdSlot)) {
-        current_lookup_fault = lookup_fault_missing_capability_new(PD_INDEX_OFFSET);
+        NODE_STATE(ksCurLookupFault) = lookup_fault_missing_capability_new(PD_INDEX_OFFSET);
 
         ret.ptSlot = NULL;
         ret.status = EXCEPTION_LOOKUP_FAULT;
@@ -948,7 +948,7 @@ exception_t handleVMFault(tcb_t *thread, vm_fault_type_t vm_faultType)
             addr = GET_PAR_ADDR(addressTranslateS1(addr)) | (addr & MASK(PAGE_BITS));
         }
 #endif
-        current_fault = seL4_Fault_VMFault_new(addr, fault, false);
+        NODE_STATE(ksCurFault) = seL4_Fault_VMFault_new(addr, fault, false);
         return EXCEPTION_FAULT;
     }
 
@@ -963,7 +963,7 @@ exception_t handleVMFault(tcb_t *thread, vm_fault_type_t vm_faultType)
             pc = GET_PAR_ADDR(addressTranslateS1(pc)) | (pc & MASK(PAGE_BITS));
         }
 #endif
-        current_fault = seL4_Fault_VMFault_new(pc, fault, true);
+        NODE_STATE(ksCurFault) = seL4_Fault_VMFault_new(pc, fault, true);
         return EXCEPTION_FAULT;
     }
 
@@ -1705,7 +1705,7 @@ static exception_t decodeARMVSpaceRootInvocation(word_t invLabel, unsigned int l
 
         if (length < 2) {
             userError("VSpaceRoot Flush: Truncated message.");
-            current_syscall_error.type = seL4_TruncatedMessage;
+            NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
             return EXCEPTION_SYSCALL_ERROR;
         }
 
@@ -1715,21 +1715,21 @@ static exception_t decodeARMVSpaceRootInvocation(word_t invLabel, unsigned int l
         /* Check sanity of arguments */
         if (end <= start) {
             userError("VSpaceRoot Flush: Invalid range.");
-            current_syscall_error.type = seL4_InvalidArgument;
-            current_syscall_error.invalidArgumentNumber = 1;
+            NODE_STATE(ksCurSyscallError).type = seL4_InvalidArgument;
+            NODE_STATE(ksCurSyscallError).invalidArgumentNumber = 1;
             return EXCEPTION_SYSCALL_ERROR;
         }
 
         /* Don't let applications flush kernel regions. */
         if (end > USER_TOP) {
             userError("VSpaceRoot Flush: Exceed the user addressable region.");
-            current_syscall_error.type = seL4_IllegalOperation;
+            NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
             return EXCEPTION_SYSCALL_ERROR;
         }
 
         if (unlikely(!isValidNativeRoot(cap))) {
-            current_syscall_error.type = seL4_InvalidCapability;
-            current_syscall_error.invalidCapNumber = 0;
+            NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+            NODE_STATE(ksCurSyscallError).invalidCapNumber = 0;
             return EXCEPTION_SYSCALL_ERROR;
         }
 
@@ -1740,15 +1740,15 @@ static exception_t decodeARMVSpaceRootInvocation(word_t invLabel, unsigned int l
         find_ret = findVSpaceForASID(asid);
         if (unlikely(find_ret.status != EXCEPTION_NONE)) {
             userError("VSpaceRoot Flush: No VSpace for ASID");
-            current_syscall_error.type = seL4_FailedLookup;
-            current_syscall_error.failedLookupWasSource = false;
+            NODE_STATE(ksCurSyscallError).type = seL4_FailedLookup;
+            NODE_STATE(ksCurSyscallError).failedLookupWasSource = false;
             return EXCEPTION_SYSCALL_ERROR;
         }
 
         if (unlikely(find_ret.vspace_root != vspaceRoot)) {
             userError("VSpaceRoot Flush: Invalid VSpace Cap");
-            current_syscall_error.type = seL4_InvalidCapability;
-            current_syscall_error.invalidCapNumber = 0;
+            NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+            NODE_STATE(ksCurSyscallError).invalidCapNumber = 0;
             return EXCEPTION_SYSCALL_ERROR;
         }
 
@@ -1765,9 +1765,9 @@ static exception_t decodeARMVSpaceRootInvocation(word_t invLabel, unsigned int l
 
         /* Refuse to cross a page boundary. */
         if (PAGE_BASE(start, resolve_ret.frameSize) != PAGE_BASE(end - 1, resolve_ret.frameSize)) {
-            current_syscall_error.type = seL4_RangeError;
-            current_syscall_error.rangeErrorMin = start;
-            current_syscall_error.rangeErrorMax = PAGE_BASE(start, resolve_ret.frameSize) +
+            NODE_STATE(ksCurSyscallError).type = seL4_RangeError;
+            NODE_STATE(ksCurSyscallError).rangeErrorMin = start;
+            NODE_STATE(ksCurSyscallError).rangeErrorMax = PAGE_BASE(start, resolve_ret.frameSize) +
                                                   MASK(pageBitsForSize(resolve_ret.frameSize));
             return EXCEPTION_SYSCALL_ERROR;
         }
@@ -1779,7 +1779,7 @@ static exception_t decodeARMVSpaceRootInvocation(word_t invLabel, unsigned int l
         return performVSpaceFlush(invLabel, vspaceRoot, asid, start, end - 1, pstart);
 
     default:
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 }
@@ -1798,7 +1798,7 @@ static exception_t decodeARMPageUpperDirectoryInvocation(word_t invLabel, unsign
 
     if (invLabel == ARMPageUpperDirectoryUnmap) {
         if (unlikely(!isFinalCapability(cte))) {
-            current_syscall_error.type = seL4_RevokeFirst;
+            NODE_STATE(ksCurSyscallError).type = seL4_RevokeFirst;
             return EXCEPTION_SYSCALL_ERROR;
         }
 
@@ -1807,18 +1807,18 @@ static exception_t decodeARMPageUpperDirectoryInvocation(word_t invLabel, unsign
     }
 
     if (unlikely(invLabel != ARMPageUpperDirectoryMap)) {
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (unlikely(length < 2 || NODE_STATE(ksCurrentExtraCaps).excaprefs[0] == NULL)) {
-        current_syscall_error.type = seL4_TruncatedMessage;
+        NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (unlikely(cap_page_upper_directory_cap_get_capPUDIsMapped(cap))) {
-        current_syscall_error.type = seL4_InvalidCapability;
-        current_syscall_error.invalidCapNumber = 0;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 0;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -1826,8 +1826,8 @@ static exception_t decodeARMPageUpperDirectoryInvocation(word_t invLabel, unsign
     pgdCap = NODE_STATE(ksCurrentExtraCaps).excaprefs[0]->cap;
 
     if (unlikely(!isValidNativeRoot(pgdCap))) {
-        current_syscall_error.type = seL4_InvalidCapability;
-        current_syscall_error.invalidCapNumber = 1;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 1;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -1835,28 +1835,28 @@ static exception_t decodeARMPageUpperDirectoryInvocation(word_t invLabel, unsign
     asid = cap_vtable_root_get_mappedASID(pgdCap);
 
     if (unlikely(vaddr > USER_TOP)) {
-        current_syscall_error.type = seL4_InvalidArgument;
-        current_syscall_error.invalidArgumentNumber = 0;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidArgument;
+        NODE_STATE(ksCurSyscallError).invalidArgumentNumber = 0;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     find_ret = findVSpaceForASID(asid);
     if (unlikely(find_ret.status != EXCEPTION_NONE)) {
-        current_syscall_error.type = seL4_FailedLookup;
-        current_syscall_error.failedLookupWasSource = false;
+        NODE_STATE(ksCurSyscallError).type = seL4_FailedLookup;
+        NODE_STATE(ksCurSyscallError).failedLookupWasSource = false;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (unlikely(find_ret.vspace_root != pgd)) {
-        current_syscall_error.type = seL4_InvalidCapability;
-        current_syscall_error.invalidCapNumber = 1;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 1;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     pgdSlot = lookupPGDSlot(pgd, vaddr);
 
     if (unlikely(pgde_pgde_pud_ptr_get_present(pgdSlot.pgdSlot))) {
-        current_syscall_error.type = seL4_DeleteFirst;
+        NODE_STATE(ksCurSyscallError).type = seL4_DeleteFirst;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -1885,7 +1885,7 @@ static exception_t decodeARMPageDirectoryInvocation(word_t invLabel, unsigned in
 
     if (invLabel == ARMPageDirectoryUnmap) {
         if (unlikely(!isFinalCapability(cte))) {
-            current_syscall_error.type = seL4_RevokeFirst;
+            NODE_STATE(ksCurSyscallError).type = seL4_RevokeFirst;
             return EXCEPTION_SYSCALL_ERROR;
         }
 
@@ -1894,18 +1894,18 @@ static exception_t decodeARMPageDirectoryInvocation(word_t invLabel, unsigned in
     }
 
     if (unlikely(invLabel != ARMPageDirectoryMap)) {
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (unlikely(length < 2 || NODE_STATE(ksCurrentExtraCaps).excaprefs[0] == NULL)) {
-        current_syscall_error.type = seL4_TruncatedMessage;
+        NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (unlikely(cap_page_directory_cap_get_capPDIsMapped(cap))) {
-        current_syscall_error.type = seL4_InvalidCapability;
-        current_syscall_error.invalidCapNumber = 0;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 0;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -1913,8 +1913,8 @@ static exception_t decodeARMPageDirectoryInvocation(word_t invLabel, unsigned in
     vspaceRootCap = NODE_STATE(ksCurrentExtraCaps).excaprefs[0]->cap;
 
     if (unlikely(!isValidNativeRoot(vspaceRootCap))) {
-        current_syscall_error.type = seL4_InvalidCapability;
-        current_syscall_error.invalidCapNumber = 1;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 1;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -1922,35 +1922,35 @@ static exception_t decodeARMPageDirectoryInvocation(word_t invLabel, unsigned in
     asid = cap_vtable_root_get_mappedASID(vspaceRootCap);
 
     if (unlikely(vaddr > USER_TOP)) {
-        current_syscall_error.type = seL4_InvalidArgument;
-        current_syscall_error.invalidArgumentNumber = 0;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidArgument;
+        NODE_STATE(ksCurSyscallError).invalidArgumentNumber = 0;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     find_ret = findVSpaceForASID(asid);
     if (unlikely(find_ret.status != EXCEPTION_NONE)) {
-        current_syscall_error.type = seL4_FailedLookup;
-        current_syscall_error.failedLookupWasSource = false;
+        NODE_STATE(ksCurSyscallError).type = seL4_FailedLookup;
+        NODE_STATE(ksCurSyscallError).failedLookupWasSource = false;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (unlikely(find_ret.vspace_root != vspaceRoot)) {
-        current_syscall_error.type = seL4_InvalidCapability;
-        current_syscall_error.invalidCapNumber = 1;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 1;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     pudSlot = lookupPUDSlot(vspaceRoot, vaddr);
 
     if (pudSlot.status != EXCEPTION_NONE) {
-        current_syscall_error.type = seL4_FailedLookup;
-        current_syscall_error.failedLookupWasSource = false;
+        NODE_STATE(ksCurSyscallError).type = seL4_FailedLookup;
+        NODE_STATE(ksCurSyscallError).failedLookupWasSource = false;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (unlikely(pude_pude_pd_ptr_get_present(pudSlot.pudSlot) ||
                  pude_pude_1g_ptr_get_present(pudSlot.pudSlot))) {
-        current_syscall_error.type = seL4_DeleteFirst;
+        NODE_STATE(ksCurSyscallError).type = seL4_DeleteFirst;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -1977,7 +1977,7 @@ static exception_t decodeARMPageTableInvocation(word_t invLabel, unsigned int le
 
     if (invLabel == ARMPageTableUnmap) {
         if (unlikely(!isFinalCapability(cte))) {
-            current_syscall_error.type = seL4_RevokeFirst;
+            NODE_STATE(ksCurSyscallError).type = seL4_RevokeFirst;
             return EXCEPTION_SYSCALL_ERROR;
         }
 
@@ -1986,18 +1986,18 @@ static exception_t decodeARMPageTableInvocation(word_t invLabel, unsigned int le
     }
 
     if (unlikely(invLabel != ARMPageTableMap)) {
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (unlikely(length < 2 || NODE_STATE(ksCurrentExtraCaps).excaprefs[0] == NULL)) {
-        current_syscall_error.type = seL4_TruncatedMessage;
+        NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (unlikely(cap_page_table_cap_get_capPTIsMapped(cap))) {
-        current_syscall_error.type = seL4_InvalidCapability;
-        current_syscall_error.invalidCapNumber = 0;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 0;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -2005,8 +2005,8 @@ static exception_t decodeARMPageTableInvocation(word_t invLabel, unsigned int le
     vspaceRootCap = NODE_STATE(ksCurrentExtraCaps).excaprefs[0]->cap;
 
     if (unlikely(!isValidNativeRoot(vspaceRootCap))) {
-        current_syscall_error.type = seL4_InvalidCapability;
-        current_syscall_error.invalidCapNumber = 1;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 1;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -2014,35 +2014,35 @@ static exception_t decodeARMPageTableInvocation(word_t invLabel, unsigned int le
     asid = cap_vtable_root_get_mappedASID(vspaceRootCap);
 
     if (unlikely(vaddr > USER_TOP)) {
-        current_syscall_error.type = seL4_InvalidArgument;
-        current_syscall_error.invalidArgumentNumber = 0;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidArgument;
+        NODE_STATE(ksCurSyscallError).invalidArgumentNumber = 0;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     find_ret = findVSpaceForASID(asid);
     if (unlikely(find_ret.status != EXCEPTION_NONE)) {
-        current_syscall_error.type = seL4_FailedLookup;
-        current_syscall_error.failedLookupWasSource = false;
+        NODE_STATE(ksCurSyscallError).type = seL4_FailedLookup;
+        NODE_STATE(ksCurSyscallError).failedLookupWasSource = false;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (unlikely(find_ret.vspace_root != vspaceRoot)) {
-        current_syscall_error.type = seL4_InvalidCapability;
-        current_syscall_error.invalidCapNumber = 1;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 1;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     pdSlot = lookupPDSlot(vspaceRoot, vaddr);
 
     if (pdSlot.status != EXCEPTION_NONE) {
-        current_syscall_error.type = seL4_FailedLookup;
-        current_syscall_error.failedLookupWasSource = false;
+        NODE_STATE(ksCurSyscallError).type = seL4_FailedLookup;
+        NODE_STATE(ksCurSyscallError).failedLookupWasSource = false;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (unlikely(pde_pde_small_ptr_get_present(pdSlot.pdSlot) ||
                  pde_pde_large_ptr_get_present(pdSlot.pdSlot))) {
-        current_syscall_error.type = seL4_DeleteFirst;
+        NODE_STATE(ksCurSyscallError).type = seL4_DeleteFirst;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -2072,7 +2072,7 @@ static exception_t decodeARMFrameInvocation(word_t invLabel, unsigned int length
         findVSpaceForASID_ret_t find_ret;
 
         if (unlikely(length < 3 || NODE_STATE(ksCurrentExtraCaps).excaprefs[0] == NULL)) {
-            current_syscall_error.type = seL4_TruncatedMessage;
+            NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
             return EXCEPTION_SYSCALL_ERROR;
         }
 
@@ -2085,8 +2085,8 @@ static exception_t decodeARMFrameInvocation(word_t invLabel, unsigned int length
                                 rightsFromWord(getSyscallArg(1, buffer)));
 
         if (unlikely(!isValidNativeRoot(vspaceRootCap))) {
-            current_syscall_error.type = seL4_InvalidCapability;
-            current_syscall_error.invalidCapNumber = 1;
+            NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+            NODE_STATE(ksCurSyscallError).invalidCapNumber = 1;
             return EXCEPTION_SYSCALL_ERROR;
         }
 
@@ -2095,19 +2095,19 @@ static exception_t decodeARMFrameInvocation(word_t invLabel, unsigned int length
 
         find_ret = findVSpaceForASID(asid);
         if (unlikely(find_ret.status != EXCEPTION_NONE)) {
-            current_syscall_error.type = seL4_FailedLookup;
-            current_syscall_error.failedLookupWasSource = false;
+            NODE_STATE(ksCurSyscallError).type = seL4_FailedLookup;
+            NODE_STATE(ksCurSyscallError).failedLookupWasSource = false;
             return EXCEPTION_SYSCALL_ERROR;
         }
 
         if (unlikely(find_ret.vspace_root != vspaceRoot)) {
-            current_syscall_error.type = seL4_InvalidCapability;
-            current_syscall_error.invalidCapNumber = 1;
+            NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+            NODE_STATE(ksCurSyscallError).invalidCapNumber = 1;
             return EXCEPTION_SYSCALL_ERROR;
         }
 
         if (unlikely(!IS_PAGE_ALIGNED(vaddr, frameSize))) {
-            current_syscall_error.type = seL4_AlignmentError;
+            NODE_STATE(ksCurSyscallError).type = seL4_AlignmentError;
             return EXCEPTION_SYSCALL_ERROR;
         }
 
@@ -2117,20 +2117,20 @@ static exception_t decodeARMFrameInvocation(word_t invLabel, unsigned int length
         if (frame_asid != asidInvalid) {
             if (frame_asid != asid) {
                 userError("ARMPageMap: Attempting to remap a frame that does not belong to the passed address space");
-                current_syscall_error.type = seL4_InvalidCapability;
-                current_syscall_error.invalidArgumentNumber = 0;
+                NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+                NODE_STATE(ksCurSyscallError).invalidArgumentNumber = 0;
                 return EXCEPTION_SYSCALL_ERROR;
 
             } else if (cap_frame_cap_get_capFMappedAddress(cap) != vaddr) {
                 userError("ARMPageMap: Attempting to map frame into multiple addresses");
-                current_syscall_error.type = seL4_InvalidArgument;
-                current_syscall_error.invalidArgumentNumber = 2;
+                NODE_STATE(ksCurSyscallError).type = seL4_InvalidArgument;
+                NODE_STATE(ksCurSyscallError).invalidArgumentNumber = 2;
                 return EXCEPTION_SYSCALL_ERROR;
             }
         } else {
             if (unlikely(vaddr + BIT(pageBitsForSize(frameSize)) - 1 > USER_TOP)) {
-                current_syscall_error.type = seL4_InvalidArgument;
-                current_syscall_error.invalidArgumentNumber = 0;
+                NODE_STATE(ksCurSyscallError).type = seL4_InvalidArgument;
+                NODE_STATE(ksCurSyscallError).invalidArgumentNumber = 0;
                 return EXCEPTION_SYSCALL_ERROR;
             }
         }
@@ -2144,8 +2144,8 @@ static exception_t decodeARMFrameInvocation(word_t invLabel, unsigned int length
             lookupPTSlot_ret_t lu_ret = lookupPTSlot(vspaceRoot, vaddr);
 
             if (unlikely(lu_ret.status != EXCEPTION_NONE)) {
-                current_syscall_error.type = seL4_FailedLookup;
-                current_syscall_error.failedLookupWasSource = false;
+                NODE_STATE(ksCurSyscallError).type = seL4_FailedLookup;
+                NODE_STATE(ksCurSyscallError).failedLookupWasSource = false;
                 return EXCEPTION_SYSCALL_ERROR;
             }
 
@@ -2157,8 +2157,8 @@ static exception_t decodeARMFrameInvocation(word_t invLabel, unsigned int length
             lookupPDSlot_ret_t lu_ret = lookupPDSlot(vspaceRoot, vaddr);
 
             if (unlikely(lu_ret.status != EXCEPTION_NONE)) {
-                current_syscall_error.type = seL4_FailedLookup;
-                current_syscall_error.failedLookupWasSource = false;
+                NODE_STATE(ksCurSyscallError).type = seL4_FailedLookup;
+                NODE_STATE(ksCurSyscallError).failedLookupWasSource = false;
                 return EXCEPTION_SYSCALL_ERROR;
             }
 
@@ -2170,8 +2170,8 @@ static exception_t decodeARMFrameInvocation(word_t invLabel, unsigned int length
             lookupPUDSlot_ret_t lu_ret = lookupPUDSlot(vspaceRoot, vaddr);
 
             if (unlikely(lu_ret.status != EXCEPTION_NONE)) {
-                current_syscall_error.type = seL4_FailedLookup;
-                current_syscall_error.failedLookupWasSource = false;
+                NODE_STATE(ksCurSyscallError).type = seL4_FailedLookup;
+                NODE_STATE(ksCurSyscallError).failedLookupWasSource = false;
                 return EXCEPTION_SYSCALL_ERROR;
             }
 
@@ -2197,13 +2197,13 @@ static exception_t decodeARMFrameInvocation(word_t invLabel, unsigned int length
 
         if (length < 2) {
             userError("Page Flush: Truncated message.");
-            current_syscall_error.type = seL4_TruncatedMessage;
+            NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
             return EXCEPTION_SYSCALL_ERROR;
         }
 
         if (unlikely(cap_frame_cap_get_capFMappedASID(cap) == 0)) {
             userError("Page Flush: Frame is not mapped.");
-            current_syscall_error.type = seL4_IllegalOperation;
+            NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
             return EXCEPTION_SYSCALL_ERROR;
         }
 
@@ -2213,8 +2213,8 @@ static exception_t decodeARMFrameInvocation(word_t invLabel, unsigned int length
         find_ret = findVSpaceForASID(asid);
         if (unlikely(find_ret.status != EXCEPTION_NONE)) {
             userError("Page Flush: No PGD for ASID");
-            current_syscall_error.type = seL4_FailedLookup;
-            current_syscall_error.failedLookupWasSource = false;
+            NODE_STATE(ksCurSyscallError).type = seL4_FailedLookup;
+            NODE_STATE(ksCurSyscallError).failedLookupWasSource = false;
             return EXCEPTION_SYSCALL_ERROR;
         }
 
@@ -2224,8 +2224,8 @@ static exception_t decodeARMFrameInvocation(word_t invLabel, unsigned int length
         /* check that the range is sane */
         if (end <= start) {
             userError("PageFlush: Invalid range");
-            current_syscall_error.type = seL4_InvalidArgument;
-            current_syscall_error.invalidArgumentNumber = 1;
+            NODE_STATE(ksCurSyscallError).type = seL4_InvalidArgument;
+            NODE_STATE(ksCurSyscallError).invalidArgumentNumber = 1;
             return EXCEPTION_SYSCALL_ERROR;
         }
 
@@ -2233,8 +2233,8 @@ static exception_t decodeARMFrameInvocation(word_t invLabel, unsigned int length
         page_size = BIT(pageBitsForSize(cap_frame_cap_get_capFSize(cap)));
         if (start >= page_size || end > page_size) {
             userError("Page Flush: Requested range not inside page");
-            current_syscall_error.type = seL4_InvalidArgument;
-            current_syscall_error.invalidArgumentNumber = 0;
+            NODE_STATE(ksCurSyscallError).type = seL4_InvalidArgument;
+            NODE_STATE(ksCurSyscallError).invalidArgumentNumber = 0;
             return EXCEPTION_SYSCALL_ERROR;
         }
 
@@ -2243,7 +2243,7 @@ static exception_t decodeARMFrameInvocation(word_t invLabel, unsigned int length
         /* Don't let applications flush outside of the kernel window */
         if (pstart < PADDR_BASE || ((end - start) + pstart) > PADDR_TOP) {
             userError("Page Flush: Overlaps kernel region.");
-            current_syscall_error.type = seL4_IllegalOperation;
+            NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
             return EXCEPTION_SYSCALL_ERROR;
         }
 #endif
@@ -2258,7 +2258,7 @@ static exception_t decodeARMFrameInvocation(word_t invLabel, unsigned int length
         return performPageGetAddress(cap_frame_cap_get_capFBasePtr(cap), call);
 
     default:
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 }
@@ -2293,7 +2293,7 @@ exception_t decodeARMMMUInvocation(word_t invLabel, word_t length, cptr_t cptr,
         exception_t status;
 
         if (unlikely(invLabel != ARMASIDControlMakePool)) {
-            current_syscall_error.type = seL4_IllegalOperation;
+            NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
 
             return EXCEPTION_SYSCALL_ERROR;
         }
@@ -2301,7 +2301,7 @@ exception_t decodeARMMMUInvocation(word_t invLabel, word_t length, cptr_t cptr,
         if (unlikely(length < 2 ||
                      NODE_STATE(ksCurrentExtraCaps).excaprefs[0] == NULL ||
                      NODE_STATE(ksCurrentExtraCaps).excaprefs[1] == NULL)) {
-            current_syscall_error.type = seL4_TruncatedMessage;
+            NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
 
             return EXCEPTION_SYSCALL_ERROR;
         }
@@ -2316,7 +2316,7 @@ exception_t decodeARMMMUInvocation(word_t invLabel, word_t length, cptr_t cptr,
         for (i = 0; i < nASIDPools && armKSASIDTable[i]; i++);
 
         if (unlikely(i == nASIDPools)) { /* If no unallocated pool is found */
-            current_syscall_error.type = seL4_DeleteFirst;
+            NODE_STATE(ksCurSyscallError).type = seL4_DeleteFirst;
 
             return EXCEPTION_SYSCALL_ERROR;
         }
@@ -2326,8 +2326,8 @@ exception_t decodeARMMMUInvocation(word_t invLabel, word_t length, cptr_t cptr,
         if (unlikely(cap_get_capType(untyped) != cap_untyped_cap ||
                      cap_untyped_cap_get_capBlockSize(untyped) != seL4_ASIDPoolBits ||
                      cap_untyped_cap_get_capIsDevice(untyped))) {
-            current_syscall_error.type = seL4_InvalidCapability;
-            current_syscall_error.invalidCapNumber = 1;
+            NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+            NODE_STATE(ksCurSyscallError).invalidCapNumber = 1;
 
             return EXCEPTION_SYSCALL_ERROR;
         }
@@ -2362,13 +2362,13 @@ exception_t decodeARMMMUInvocation(word_t invLabel, word_t length, cptr_t cptr,
         asid_t asid;
 
         if (unlikely(invLabel != ARMASIDPoolAssign)) {
-            current_syscall_error.type = seL4_IllegalOperation;
+            NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
 
             return EXCEPTION_SYSCALL_ERROR;
         }
 
         if (unlikely(NODE_STATE(ksCurrentExtraCaps).excaprefs[0] == NULL)) {
-            current_syscall_error.type = seL4_TruncatedMessage;
+            NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
 
             return EXCEPTION_SYSCALL_ERROR;
         }
@@ -2377,8 +2377,8 @@ exception_t decodeARMMMUInvocation(word_t invLabel, word_t length, cptr_t cptr,
         vspaceCap = vspaceCapSlot->cap;
 
         if (unlikely(!isVTableRoot(vspaceCap) || cap_vtable_root_isMapped(vspaceCap))) {
-            current_syscall_error.type = seL4_InvalidCapability;
-            current_syscall_error.invalidCapNumber = 1;
+            NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+            NODE_STATE(ksCurSyscallError).invalidCapNumber = 1;
 
             return EXCEPTION_SYSCALL_ERROR;
         }
@@ -2386,16 +2386,16 @@ exception_t decodeARMMMUInvocation(word_t invLabel, word_t length, cptr_t cptr,
         pool = armKSASIDTable[cap_asid_pool_cap_get_capASIDBase(cap) >> asidLowBits];
 
         if (unlikely(!pool)) {
-            current_syscall_error.type = seL4_FailedLookup;
-            current_syscall_error.failedLookupWasSource = false;
-            current_lookup_fault = lookup_fault_invalid_root_new();
+            NODE_STATE(ksCurSyscallError).type = seL4_FailedLookup;
+            NODE_STATE(ksCurSyscallError).failedLookupWasSource = false;
+            NODE_STATE(ksCurLookupFault) = lookup_fault_invalid_root_new();
 
             return EXCEPTION_SYSCALL_ERROR;
         }
 
         if (unlikely(pool != ASID_POOL_PTR(cap_asid_pool_cap_get_capASIDPool(cap)))) {
-            current_syscall_error.type = seL4_InvalidCapability;
-            current_syscall_error.invalidCapNumber = 0;
+            NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+            NODE_STATE(ksCurSyscallError).invalidCapNumber = 0;
 
             return EXCEPTION_SYSCALL_ERROR;
         }
@@ -2406,7 +2406,7 @@ exception_t decodeARMMMUInvocation(word_t invLabel, word_t length, cptr_t cptr,
                                                || (asid_map_get_type(pool->array[i]) != asid_map_asid_map_none)); i++);
 
         if (unlikely(i == 1 << asidLowBits)) {
-            current_syscall_error.type = seL4_DeleteFirst;
+            NODE_STATE(ksCurSyscallError).type = seL4_DeleteFirst;
 
             return EXCEPTION_SYSCALL_ERROR;
         }
@@ -2524,14 +2524,14 @@ exception_t benchmark_arch_map_logBuffer(word_t frame_cptr)
 
     if (unlikely(lu_ret.status != EXCEPTION_NONE)) {
         userError("Invalid cap #%lu.", frame_cptr);
-        current_fault = seL4_Fault_CapFault_new(frame_cptr, false);
+        NODE_STATE(ksCurFault) = seL4_Fault_CapFault_new(frame_cptr, false);
 
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (cap_get_capType(lu_ret.cap) != cap_frame_cap) {
         userError("Invalid cap. Log buffer should be of a frame cap");
-        current_fault = seL4_Fault_CapFault_new(frame_cptr, false);
+        NODE_STATE(ksCurFault) = seL4_Fault_CapFault_new(frame_cptr, false);
 
         return EXCEPTION_SYSCALL_ERROR;
     }
@@ -2540,7 +2540,7 @@ exception_t benchmark_arch_map_logBuffer(word_t frame_cptr)
 
     if (frameSize != ARMLargePage) {
         userError("Invalid frame size. The kernel expects 2M log buffer");
-        current_fault = seL4_Fault_CapFault_new(frame_cptr, false);
+        NODE_STATE(ksCurFault) = seL4_Fault_CapFault_new(frame_cptr, false);
 
         return EXCEPTION_SYSCALL_ERROR;
     }

@@ -54,9 +54,9 @@ static inline void handleReservedIRQ(irq_t irq)
 static inline exception_t Arch_checkIRQ(word_t irq_w)
 {
     if (irq_w > maxIRQ) {
-        current_syscall_error.type = seL4_RangeError;
-        current_syscall_error.rangeErrorMin = 0;
-        current_syscall_error.rangeErrorMax = maxIRQ;
+        NODE_STATE(ksCurSyscallError).type = seL4_RangeError;
+        NODE_STATE(ksCurSyscallError).rangeErrorMin = 0;
+        NODE_STATE(ksCurSyscallError).rangeErrorMax = maxIRQ;
         userError("Rejecting request for IRQ %u. IRQ is greater than maxIRQ.", (int)irq_w);
         return EXCEPTION_SYSCALL_ERROR;
     }

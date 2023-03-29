@@ -44,7 +44,3 @@ typedef struct debug_syscall_error debug_syscall_error_t;
 
 extern debug_syscall_error_t current_debug_error;
 #endif
-extern lookup_fault_t current_lookup_fault;
-extern seL4_Fault_t current_fault;
-extern syscall_error_t current_syscall_error;
-

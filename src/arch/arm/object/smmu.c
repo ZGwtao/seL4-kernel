@@ -54,11 +54,11 @@ exception_t decodeARMSIDControlInvocation(word_t label, unsigned int length, cpt
 
     if (label != ARMSIDIssueSIDManager) {
         userError("SIDControl: Illegal operation.");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
     if (length < 3 || NODE_STATE(ksCurrentExtraCaps).excaprefs[0] == NULL) {
-        current_syscall_error.type = seL4_TruncatedMessage;
+        NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -68,14 +68,14 @@ exception_t decodeARMSIDControlInvocation(word_t label, unsigned int length, cpt
     cnodeCap = NODE_STATE(ksCurrentExtraCaps).excaprefs[0]->cap;
 
     if (sid >= SMMU_MAX_SID) {
-        current_syscall_error.type = seL4_RangeError;
-        current_syscall_error.rangeErrorMin = 0;
-        current_syscall_error.rangeErrorMax = SMMU_MAX_SID - 1;
+        NODE_STATE(ksCurSyscallError).type = seL4_RangeError;
+        NODE_STATE(ksCurSyscallError).rangeErrorMin = 0;
+        NODE_STATE(ksCurSyscallError).rangeErrorMax = SMMU_MAX_SID - 1;
         userError("Rejecting request for SID %u. SID is greater than or equal to SMMU_MAX_SID.", (int)sid);
         return EXCEPTION_SYSCALL_ERROR;
     }
     if (smmuStateSIDTable[sid]) {
-        current_syscall_error.type = seL4_RevokeFirst;
+        NODE_STATE(ksCurSyscallError).type = seL4_RevokeFirst;
         userError("Rejecting request for SID %u. Already active.", (int)sid);
         return EXCEPTION_SYSCALL_ERROR;
     }
@@ -112,21 +112,21 @@ exception_t decodeARMSIDInvocation(word_t label, unsigned int length, cptr_t cpt
     case ARMSIDBindCB:
         if (unlikely(NODE_STATE(ksCurrentExtraCaps).excaprefs[0] == NULL)) {
             userError("ARMSIDBindCB: Invalid CB cap.");
-            current_syscall_error.type = seL4_TruncatedMessage;
+            NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
             return EXCEPTION_SYSCALL_ERROR;
         }
         cbCapSlot = NODE_STATE(ksCurrentExtraCaps).excaprefs[0];
         cbCap = cbCapSlot->cap;
         if (unlikely(cap_get_capType(cbCap) != cap_cb_cap)) {
             userError("ARMSIDBindCB: Invalid CB cap.");
-            current_syscall_error.type = seL4_InvalidCapability;
-            current_syscall_error.invalidCapNumber = 1;
+            NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+            NODE_STATE(ksCurSyscallError).invalidCapNumber = 1;
             return EXCEPTION_SYSCALL_ERROR;
         }
         if (unlikely(checkARMCBVspace(cbCap) != EXCEPTION_NONE)) {
             userError("ARMSIDBindCB: Invalid CB cap.");
-            current_syscall_error.type = seL4_InvalidCapability;
-            current_syscall_error.invalidCapNumber = 1;
+            NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+            NODE_STATE(ksCurSyscallError).invalidCapNumber = 1;
             return EXCEPTION_SYSCALL_ERROR;
         }
         sid = cap_sid_cap_get_capSID(cap);
@@ -155,7 +155,7 @@ exception_t decodeARMSIDInvocation(word_t label, unsigned int length, cptr_t cpt
         cbAssignSlot = smmuStateSIDNode + sid;
         if (unlikely(cap_get_capType(cbAssignSlot->cap) != cap_cb_cap)) {
             userError("ARMSIDUnbindCB: The SID is not assigned with a context bank.");
-            current_syscall_error.type = seL4_IllegalOperation;
+            NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
             return EXCEPTION_SYSCALL_ERROR;
         }
         status = cteDelete(cbAssignSlot, true);
@@ -167,7 +167,7 @@ exception_t decodeARMSIDInvocation(word_t label, unsigned int length, cptr_t cpt
         return EXCEPTION_NONE;
     default:
         userError("ARMSID: Illegal operation.");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 }
@@ -203,11 +203,11 @@ exception_t decodeARMCBControlInvocation(word_t label, unsigned int length, cptr
 
     if (label != ARMCBIssueCBManager) {
         userError("ARMCBControl: Illegal operation.");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
     if (length < 3 || NODE_STATE(ksCurrentExtraCaps).excaprefs[0] == NULL) {
-        current_syscall_error.type = seL4_TruncatedMessage;
+        NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -217,14 +217,14 @@ exception_t decodeARMCBControlInvocation(word_t label, unsigned int length, cptr
     cnodeCap = NODE_STATE(ksCurrentExtraCaps).excaprefs[0]->cap;
 
     if (cb >= SMMU_MAX_CB) {
-        current_syscall_error.type = seL4_RangeError;
-        current_syscall_error.rangeErrorMin = 0;
-        current_syscall_error.rangeErrorMax = SMMU_MAX_CB - 1;
+        NODE_STATE(ksCurSyscallError).type = seL4_RangeError;
+        NODE_STATE(ksCurSyscallError).rangeErrorMin = 0;
+        NODE_STATE(ksCurSyscallError).rangeErrorMax = SMMU_MAX_CB - 1;
         userError("Rejecting request for CB %u. CB is greater than or equal to SMMU_MAX_CB.", (int)cb);
         return EXCEPTION_SYSCALL_ERROR;
     }
     if (smmuStateCBTable[cb]) {
-        current_syscall_error.type = seL4_RevokeFirst;
+        NODE_STATE(ksCurSyscallError).type = seL4_RevokeFirst;
         userError("Rejecting request for CB %u. Already active.", (int)cb);
         return EXCEPTION_SYSCALL_ERROR;
     }
@@ -266,7 +266,7 @@ exception_t decodeARMCBInvocation(word_t label, unsigned int length, cptr_t cptr
     case ARMCBTLBInvalidate:
         if (unlikely(checkARMCBVspace(cap) != EXCEPTION_NONE)) {
             userError("ARMCBTLBInvalidate: the CB does not have a vspace root.");
-            current_syscall_error.type = seL4_IllegalOperation;
+            NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
             return EXCEPTION_SYSCALL_ERROR;
         }
         cb = cap_cb_cap_get_capCB(cap);
@@ -277,7 +277,7 @@ exception_t decodeARMCBInvocation(word_t label, unsigned int length, cptr_t cptr
 
     case ARMCBAssignVspace:
         if (unlikely(NODE_STATE(ksCurrentExtraCaps).excaprefs[0] == NULL)) {
-            current_syscall_error.type = seL4_TruncatedMessage;
+            NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
             return EXCEPTION_SYSCALL_ERROR;
         }
 
@@ -286,8 +286,8 @@ exception_t decodeARMCBInvocation(word_t label, unsigned int length, cptr_t cptr
 
         if (unlikely(!isVTableRoot(vspaceCap) || !cap_vtable_root_isMapped(vspaceCap))) {
             userError("ARMCBAssignVspace: the vspace is invalid");
-            current_syscall_error.type = seL4_InvalidCapability;
-            current_syscall_error.invalidCapNumber = 1;
+            NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+            NODE_STATE(ksCurSyscallError).invalidCapNumber = 1;
             return EXCEPTION_SYSCALL_ERROR;
         }
 
@@ -315,7 +315,7 @@ exception_t decodeARMCBInvocation(word_t label, unsigned int length, cptr_t cptr
     case ARMCBUnassignVspace:
         if (unlikely(checkARMCBVspace(cap) != EXCEPTION_NONE)) {
             userError("ARMCBUnassignVspace: the CB does not have an assigned VSpace.");
-            current_syscall_error.type = seL4_IllegalOperation;
+            NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
             return EXCEPTION_SYSCALL_ERROR;
         }
         cb = cap_cb_cap_get_capCB(cap);
@@ -349,7 +349,7 @@ exception_t decodeARMCBInvocation(word_t label, unsigned int length, cptr_t cptr
 
     default:
         userError("ARMCBInvocation: Illegal operation.");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 }

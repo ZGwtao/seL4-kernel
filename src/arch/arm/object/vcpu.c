@@ -320,15 +320,15 @@ exception_t decodeVCPUWriteReg(cap_t cap, unsigned int length, word_t *buffer)
     word_t value;
     if (length < 2) {
         userError("VCPUWriteReg: Truncated message.");
-        current_syscall_error.type = seL4_TruncatedMessage;
+        NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
     }
     field = getSyscallArg(0, buffer);
     value = getSyscallArg(1, buffer);
     if (field >= seL4_VCPUReg_Num) {
         userError("VCPUWriteReg: Invalid field 0x%lx.", (long)field);
-        current_syscall_error.type = seL4_InvalidArgument;
-        current_syscall_error.invalidArgumentNumber = 1;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidArgument;
+        NODE_STATE(ksCurSyscallError).invalidArgumentNumber = 1;
         return EXCEPTION_SYSCALL_ERROR;
     }
     setThreadState(NODE_STATE(ksCurThread), ThreadState_Restart);
@@ -356,7 +356,7 @@ exception_t decodeVCPUReadReg(cap_t cap, unsigned int length, bool_t call, word_
     word_t field;
     if (length < 1) {
         userError("VCPUReadReg: Truncated message.");
-        current_syscall_error.type = seL4_TruncatedMessage;
+        NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -364,8 +364,8 @@ exception_t decodeVCPUReadReg(cap_t cap, unsigned int length, bool_t call, word_
 
     if (field >= seL4_VCPUReg_Num) {
         userError("VCPUReadReg: Invalid field 0x%lx.", (long)field);
-        current_syscall_error.type = seL4_InvalidArgument;
-        current_syscall_error.invalidArgumentNumber = 1;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidArgument;
+        NODE_STATE(ksCurSyscallError).invalidArgumentNumber = 1;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -398,7 +398,7 @@ exception_t decodeVCPUInjectIRQ(cap_t cap, unsigned int length, word_t *buffer)
     vcpu = VCPU_PTR(cap_vcpu_cap_get_capVCPUPtr(cap));
 
     if (length < 1) {
-        current_syscall_error.type = seL4_TruncatedMessage;
+        NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -413,7 +413,7 @@ exception_t decodeVCPUInjectIRQ(cap_t cap, unsigned int length, word_t *buffer)
     vcpu = VCPU_PTR(cap_vcpu_cap_get_capVCPUPtr(cap));
 
     if (length < 2) {
-        current_syscall_error.type = seL4_TruncatedMessage;
+        NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -427,42 +427,42 @@ exception_t decodeVCPUInjectIRQ(cap_t cap, unsigned int length, word_t *buffer)
 
     /* Check IRQ parameters */
     if (vid > (1U << 10) - 1) {
-        current_syscall_error.type = seL4_RangeError;
-        current_syscall_error.rangeErrorMin = 0;
-        current_syscall_error.rangeErrorMax = (1U << 10) - 1;
-        current_syscall_error.invalidArgumentNumber = 1;
-        current_syscall_error.type = seL4_RangeError;
+        NODE_STATE(ksCurSyscallError).type = seL4_RangeError;
+        NODE_STATE(ksCurSyscallError).rangeErrorMin = 0;
+        NODE_STATE(ksCurSyscallError).rangeErrorMax = (1U << 10) - 1;
+        NODE_STATE(ksCurSyscallError).invalidArgumentNumber = 1;
+        NODE_STATE(ksCurSyscallError).type = seL4_RangeError;
         return EXCEPTION_SYSCALL_ERROR;
     }
     if (priority > 31) {
-        current_syscall_error.type = seL4_RangeError;
-        current_syscall_error.rangeErrorMin = 0;
-        current_syscall_error.rangeErrorMax = 31;
-        current_syscall_error.invalidArgumentNumber = 2;
-        current_syscall_error.type = seL4_RangeError;
+        NODE_STATE(ksCurSyscallError).type = seL4_RangeError;
+        NODE_STATE(ksCurSyscallError).rangeErrorMin = 0;
+        NODE_STATE(ksCurSyscallError).rangeErrorMax = 31;
+        NODE_STATE(ksCurSyscallError).invalidArgumentNumber = 2;
+        NODE_STATE(ksCurSyscallError).type = seL4_RangeError;
         return EXCEPTION_SYSCALL_ERROR;
     }
     if (group > 1) {
-        current_syscall_error.type = seL4_RangeError;
-        current_syscall_error.rangeErrorMin = 0;
-        current_syscall_error.rangeErrorMax = 1;
-        current_syscall_error.invalidArgumentNumber = 3;
-        current_syscall_error.type = seL4_RangeError;
+        NODE_STATE(ksCurSyscallError).type = seL4_RangeError;
+        NODE_STATE(ksCurSyscallError).rangeErrorMin = 0;
+        NODE_STATE(ksCurSyscallError).rangeErrorMax = 1;
+        NODE_STATE(ksCurSyscallError).invalidArgumentNumber = 3;
+        NODE_STATE(ksCurSyscallError).type = seL4_RangeError;
         return EXCEPTION_SYSCALL_ERROR;
     }
     /* LR index out of range */
     if (index >= gic_vcpu_num_list_regs) {
-        current_syscall_error.type = seL4_RangeError;
-        current_syscall_error.rangeErrorMin = 0;
-        current_syscall_error.rangeErrorMax = gic_vcpu_num_list_regs - 1;
-        current_syscall_error.invalidArgumentNumber = 4;
-        current_syscall_error.type = seL4_RangeError;
+        NODE_STATE(ksCurSyscallError).type = seL4_RangeError;
+        NODE_STATE(ksCurSyscallError).rangeErrorMin = 0;
+        NODE_STATE(ksCurSyscallError).rangeErrorMax = gic_vcpu_num_list_regs - 1;
+        NODE_STATE(ksCurSyscallError).invalidArgumentNumber = 4;
+        NODE_STATE(ksCurSyscallError).type = seL4_RangeError;
         return EXCEPTION_SYSCALL_ERROR;
     }
     /* LR index is in use */
     if (virq_get_virqType(vcpu->vgic.lr[index]) == virq_virq_active) {
         userError("VGIC List register in use.");
-        current_syscall_error.type = seL4_DeleteFirst;
+        NODE_STATE(ksCurSyscallError).type = seL4_DeleteFirst;
         return EXCEPTION_SYSCALL_ERROR;
     }
     virq_t virq = virq_virq_pending_new(group, priority, 1, vid);
@@ -494,7 +494,7 @@ exception_t decodeARMVCPUInvocation(
         return decodeVCPUAckVPPI(cap, length, buffer);
     default:
         userError("VCPU: Illegal operation.");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 }
@@ -504,7 +504,7 @@ exception_t decodeVCPUAckVPPI(cap_t cap, unsigned int length, word_t *buffer)
     vcpu_t *vcpu = VCPU_PTR(cap_vcpu_cap_get_capVCPUPtr(cap));
 
     if (length < 1) {
-        current_syscall_error.type = seL4_TruncatedMessage;
+        NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -518,8 +518,8 @@ exception_t decodeVCPUAckVPPI(cap_t cap, unsigned int length, word_t *buffer)
     VPPIEventIRQ_t vppi = irqVPPIEventIndex(irq);
     if (vppi == VPPIEventIRQ_invalid) {
         userError("VCPUAckVPPI: Invalid irq number.");
-        current_syscall_error.type = seL4_InvalidArgument;
-        current_syscall_error.invalidArgumentNumber = 0;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidArgument;
+        NODE_STATE(ksCurSyscallError).invalidArgumentNumber = 0;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -538,14 +538,14 @@ exception_t decodeVCPUSetTCB(cap_t cap)
     cap_t tcbCap;
     if (NODE_STATE(ksCurrentExtraCaps).excaprefs[0] == NULL) {
         userError("VCPU SetTCB: Truncated message.");
-        current_syscall_error.type = seL4_TruncatedMessage;
+        NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
     }
     tcbCap  = NODE_STATE(ksCurrentExtraCaps).excaprefs[0]->cap;
 
     if (cap_get_capType(tcbCap) != cap_thread_cap) {
         userError("TCB cap is not a TCB cap.");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 

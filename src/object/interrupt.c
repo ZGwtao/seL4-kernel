@@ -32,7 +32,7 @@ exception_t decodeIRQControlInvocation(word_t invLabel, word_t length,
         exception_t status;
 
         if (length < 3 || NODE_STATE(ksCurrentExtraCaps).excaprefs[0] == NULL) {
-            current_syscall_error.type = seL4_TruncatedMessage;
+            NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
             return EXCEPTION_SYSCALL_ERROR;
         }
         irq_w = getSyscallArg(0, buffer);
@@ -48,7 +48,7 @@ exception_t decodeIRQControlInvocation(word_t invLabel, word_t length,
         }
 
         if (isIRQActive(irq)) {
-            current_syscall_error.type = seL4_RevokeFirst;
+            NODE_STATE(ksCurSyscallError).type = seL4_RevokeFirst;
             userError("Rejecting request for IRQ %u. Already active.", (int)IRQT_TO_IRQ(irq));
             return EXCEPTION_SYSCALL_ERROR;
         }
@@ -96,7 +96,7 @@ exception_t decodeIRQHandlerInvocation(word_t invLabel, irq_t irq)
         cte_t *slot;
 
         if (NODE_STATE(ksCurrentExtraCaps).excaprefs[0] == NULL) {
-            current_syscall_error.type = seL4_TruncatedMessage;
+            NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
             return EXCEPTION_SYSCALL_ERROR;
         }
         ntfnCap = NODE_STATE(ksCurrentExtraCaps).excaprefs[0]->cap;
@@ -109,8 +109,8 @@ exception_t decodeIRQHandlerInvocation(word_t invLabel, irq_t irq)
             } else {
                 userError("IRQSetHandler: caller does not have send rights on the endpoint.");
             }
-            current_syscall_error.type = seL4_InvalidCapability;
-            current_syscall_error.invalidCapNumber = 0;
+            NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+            NODE_STATE(ksCurSyscallError).invalidCapNumber = 0;
             return EXCEPTION_SYSCALL_ERROR;
         }
 
@@ -126,7 +126,7 @@ exception_t decodeIRQHandlerInvocation(word_t invLabel, irq_t irq)
 
     default:
         userError("IRQHandler: Illegal operation.");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 }

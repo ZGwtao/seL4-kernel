@@ -23,13 +23,13 @@ exception_t Arch_decodeIRQControlInvocation(word_t invLabel, word_t length,
 {
     if (invLabel == ARMIRQIssueIRQHandlerTrigger) {
         if (length < 4 || NODE_STATE(ksCurrentExtraCaps).excaprefs[0] == NULL) {
-            current_syscall_error.type = seL4_TruncatedMessage;
+            NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
             return EXCEPTION_SYSCALL_ERROR;
         }
 
         if (!config_set(HAVE_SET_TRIGGER)) {
             userError("This platform does not support setting the IRQ trigger");
-            current_syscall_error.type = seL4_IllegalOperation;
+            NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
             return EXCEPTION_SYSCALL_ERROR;
         }
 
@@ -49,12 +49,12 @@ exception_t Arch_decodeIRQControlInvocation(word_t invLabel, word_t length,
 #if defined ENABLE_SMP_SUPPORT
         if (IRQ_IS_PPI(irq)) {
             userError("Trying to get a handler on a PPI: use GetTriggerCore.");
-            current_syscall_error.type = seL4_IllegalOperation;
+            NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
             return EXCEPTION_SYSCALL_ERROR;
         }
 #endif
         if (isIRQActive(irq)) {
-            current_syscall_error.type = seL4_RevokeFirst;
+            NODE_STATE(ksCurSyscallError).type = seL4_RevokeFirst;
             userError("Rejecting request for IRQ %u. Already active.", (int)IRQT_TO_IRQ(irq));
             return EXCEPTION_SYSCALL_ERROR;
         }
@@ -93,13 +93,13 @@ exception_t Arch_decodeIRQControlInvocation(word_t invLabel, word_t length,
         }
 
         if (target >= CONFIG_MAX_NUM_NODES) {
-            current_syscall_error.type = seL4_InvalidArgument;
+            NODE_STATE(ksCurSyscallError).type = seL4_InvalidArgument;
             userError("Target core %lu is invalid.", target);
             return EXCEPTION_SYSCALL_ERROR;
         }
 
         if (isIRQActive(irq)) {
-            current_syscall_error.type = seL4_RevokeFirst;
+            NODE_STATE(ksCurSyscallError).type = seL4_RevokeFirst;
             userError("Rejecting request for IRQ %u. Already active.", (int)IRQT_TO_IRQ(irq));
             return EXCEPTION_SYSCALL_ERROR;
         }
@@ -131,7 +131,7 @@ exception_t Arch_decodeIRQControlInvocation(word_t invLabel, word_t length,
         return Arch_invokeIRQControl(irq, destSlot, srcSlot, trigger);
 #endif /* ENABLE_SMP_SUPPORT */
     } else {
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 }

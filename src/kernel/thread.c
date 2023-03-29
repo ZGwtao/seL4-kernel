@@ -162,7 +162,7 @@ void doReplyTransferShared(tcb_t *sender, reply_t *reply)
             possibleSwitchTo(receiver);
         } else {
             if (validTimeoutHandler(receiver) && fault_type != seL4_Fault_Timeout) {
-                current_fault = seL4_Fault_Timeout_new(receiver->tcbSchedContext->scBadge);
+                NODE_STATE(ksCurFault) = seL4_Fault_Timeout_new(receiver->tcbSchedContext->scBadge);
                 handleTimeout(receiver);
             } else {
                 postpone(receiver->tcbSchedContext);
@@ -233,7 +233,7 @@ void doReplyTransfer(tcb_t *sender, tcb_t *receiver, cte_t *slot, bool_t grant)
             possibleSwitchTo(receiver);
         } else {
             if (validTimeoutHandler(receiver) && fault_type != seL4_Fault_Timeout) {
-                current_fault = seL4_Fault_Timeout_new(receiver->tcbSchedContext->scBadge);
+                NODE_STATE(ksCurFault) = seL4_Fault_Timeout_new(receiver->tcbSchedContext->scBadge);
                 handleTimeout(receiver);
             } else {
                 postpone(receiver->tcbSchedContext);
@@ -663,7 +663,7 @@ void chargeBudget(ticks_t consumed, bool_t canTimeoutFault)
 void endTimeslice(bool_t can_timeout_fault)
 {
     if (can_timeout_fault && !isRoundRobin(NODE_STATE(ksCurSC)) && validTimeoutHandler(NODE_STATE(ksCurThread))) {
-        current_fault = seL4_Fault_Timeout_new(NODE_STATE(ksCurSC)->scBadge);
+        NODE_STATE(ksCurFault) = seL4_Fault_Timeout_new(NODE_STATE(ksCurSC)->scBadge);
         handleTimeout(NODE_STATE(ksCurThread));
     } else if (refill_ready(NODE_STATE(ksCurSC)) && refill_sufficient(NODE_STATE(ksCurSC), 0)) {
         /* apply round robin */

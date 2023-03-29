@@ -34,7 +34,7 @@ bool_t sendFaultIPC(tcb_t *tptr, cap_t handlerCap, bool_t can_donate)
         assert(cap_endpoint_cap_get_capCanGrant(handlerCap) ||
                cap_endpoint_cap_get_capCanGrantReply(handlerCap));
 
-        tptr->tcbFault = current_fault;
+        tptr->tcbFault = NODE_STATE(ksCurFault);
         sendIPC(true, false,
                 cap_endpoint_cap_get_capEPBadge(handlerCap),
                 cap_endpoint_cap_get_capCanGrant(handlerCap),
@@ -53,7 +53,7 @@ bool_t sendFaultIPC(tcb_t *tptr, cap_t handlerCap, bool_t can_donate)
 void handleFault(tcb_t *tptr)
 {
     exception_t status;
-    seL4_Fault_t fault = current_fault;
+    seL4_Fault_t fault = NODE_STATE(ksCurFault);
 
     status = sendFaultIPC(tptr);
     if (status != EXCEPTION_NONE) {
@@ -68,12 +68,12 @@ exception_t sendFaultIPC(tcb_t *tptr)
     lookupCap_ret_t lu_ret;
     lookup_fault_t original_lookup_fault;
 
-    original_lookup_fault = current_lookup_fault;
+    original_lookup_fault = NODE_STATE(ksCurLookupFault);
 
     handlerCPtr = tptr->tcbFaultHandler;
     lu_ret = lookupCap(tptr, handlerCPtr);
     if (lu_ret.status != EXCEPTION_NONE) {
-        current_fault = seL4_Fault_CapFault_new(handlerCPtr, false);
+        NODE_STATE(ksCurFault) = seL4_Fault_CapFault_new(handlerCPtr, false);
         return EXCEPTION_FAULT;
     }
     handlerCap = lu_ret.cap;
@@ -82,8 +82,8 @@ exception_t sendFaultIPC(tcb_t *tptr)
         cap_endpoint_cap_get_capCanSend(handlerCap) &&
         (cap_endpoint_cap_get_capCanGrant(handlerCap) ||
          cap_endpoint_cap_get_capCanGrantReply(handlerCap))) {
-        tptr->tcbFault = current_fault;
-        if (seL4_Fault_get_seL4_FaultType(current_fault) == seL4_Fault_CapFault) {
+        tptr->tcbFault = NODE_STATE(ksCurFault);
+        if (seL4_Fault_get_seL4_FaultType(NODE_STATE(ksCurFault)) == seL4_Fault_CapFault) {
             tptr->tcbLookupFailure = original_lookup_fault;
         }
         sendIPC(true, true,
@@ -93,8 +93,8 @@ exception_t sendFaultIPC(tcb_t *tptr)
 
         return EXCEPTION_NONE;
     } else {
-        current_fault = seL4_Fault_CapFault_new(handlerCPtr, false);
-        current_lookup_fault = lookup_fault_missing_capability_new(0);
+        NODE_STATE(ksCurFault) = seL4_Fault_CapFault_new(handlerCPtr, false);
+        NODE_STATE(ksCurLookupFault) = lookup_fault_missing_capability_new(0);
 
         return EXCEPTION_FAULT;
     }
@@ -143,16 +143,16 @@ static void print_fault(seL4_Fault_t f)
 #ifdef CONFIG_KERNEL_MCS
 void handleNoFaultHandler(tcb_t *tptr)
 #else
-/* The second fault, ex2, is stored in the global current_fault */
+/* The second fault, ex2, is stored in the global NODE_STATE(ksCurFault) */
 void handleDoubleFault(tcb_t *tptr, seL4_Fault_t ex1)
 #endif
 {
 #ifdef CONFIG_PRINTING
 #ifdef CONFIG_KERNEL_MCS
     printf("Found thread has no fault handler while trying to handle:\n");
-    print_fault(current_fault);
+    print_fault(NODE_STATE(ksCurFault));
 #else
-    seL4_Fault_t ex2 = current_fault;
+    seL4_Fault_t ex2 = NODE_STATE(ksCurFault);
     printf("Caught ");
     print_fault(ex2);
     printf("\nwhile trying to handle:\n");

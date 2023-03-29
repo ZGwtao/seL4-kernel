@@ -30,7 +30,7 @@ static exception_t decodeSchedContext_UnbindObject(sched_context_t *sc)
 {
     if (NODE_STATE(ksCurrentExtraCaps).excaprefs[0] == NULL) {
         userError("SchedContext_Unbind: Truncated message.");
-        current_syscall_error.type = seL4_TruncatedMessage;
+        NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -39,27 +39,27 @@ static exception_t decodeSchedContext_UnbindObject(sched_context_t *sc)
     case cap_thread_cap:
         if (sc->scTcb != TCB_PTR(cap_thread_cap_get_capTCBPtr(cap))) {
             userError("SchedContext UnbindObject: object not bound");
-            current_syscall_error.type = seL4_IllegalOperation;
+            NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
             return EXCEPTION_SYSCALL_ERROR;
         }
         if (sc->scTcb == NODE_STATE(ksCurThread)) {
             userError("SchedContext UnbindObject: cannot unbind sc of current thread");
-            current_syscall_error.type = seL4_IllegalOperation;
+            NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
             return EXCEPTION_SYSCALL_ERROR;
         }
         break;
     case cap_notification_cap:
         if (sc->scNotification != NTFN_PTR(cap_notification_cap_get_capNtfnPtr(cap))) {
             userError("SchedContext UnbindObject: object not bound");
-            current_syscall_error.type = seL4_IllegalOperation;
+            NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
             return EXCEPTION_SYSCALL_ERROR;
         }
         break;
 
     default:
         userError("SchedContext_Unbind: invalid cap");
-        current_syscall_error.type = seL4_InvalidCapability;
-        current_syscall_error.invalidCapNumber = 1;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 1;
         return EXCEPTION_SYSCALL_ERROR;
 
     }
@@ -88,7 +88,7 @@ static exception_t decodeSchedContext_Bind(sched_context_t *sc)
 {
     if (NODE_STATE(ksCurrentExtraCaps).excaprefs[0] == NULL) {
         userError("SchedContext_Bind: Truncated Message.");
-        current_syscall_error.type = seL4_TruncatedMessage;
+        NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -98,19 +98,19 @@ static exception_t decodeSchedContext_Bind(sched_context_t *sc)
     case cap_thread_cap:
         if (sc->scTcb != NULL) {
             userError("SchedContext_Bind: sched context already bound.");
-            current_syscall_error.type = seL4_IllegalOperation;
+            NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
             return EXCEPTION_SYSCALL_ERROR;
         }
 
         if (TCB_PTR(cap_thread_cap_get_capTCBPtr(cap))->tcbSchedContext != NULL) {
             userError("SchedContext_Bind: tcb already bound.");
-            current_syscall_error.type = seL4_IllegalOperation;
+            NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
             return EXCEPTION_SYSCALL_ERROR;
         }
 
         if (isBlocked(TCB_PTR(cap_thread_cap_get_capTCBPtr(cap))) && !sc_released(sc)) {
             userError("SchedContext_Bind: tcb blocked and scheduling context not schedulable.");
-            current_syscall_error.type = seL4_IllegalOperation;
+            NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
             return EXCEPTION_SYSCALL_ERROR;
         }
 
@@ -118,20 +118,20 @@ static exception_t decodeSchedContext_Bind(sched_context_t *sc)
     case cap_notification_cap:
         if (sc->scNotification != NULL) {
             userError("SchedContext_Bind: sched context already bound.");
-            current_syscall_error.type = seL4_IllegalOperation;
+            NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
             return EXCEPTION_SYSCALL_ERROR;
         }
 
         if (notification_ptr_get_ntfnSchedContext(NTFN_PTR(cap_notification_cap_get_capNtfnPtr(cap)))) {
             userError("SchedContext_Bind: notification already bound");
-            current_syscall_error.type = seL4_IllegalOperation;
+            NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
             return EXCEPTION_SYSCALL_ERROR;
         }
         break;
     default:
         userError("SchedContext_Bind: invalid cap.");
-        current_syscall_error.type = seL4_InvalidCapability;
-        current_syscall_error.invalidCapNumber = 1;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 1;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -217,20 +217,20 @@ static exception_t decodeSchedContext_YieldTo(sched_context_t *sc, word_t *buffe
 {
     if (sc->scTcb == NULL) {
         userError("SchedContext_YieldTo: cannot yield to an inactive sched context");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (sc->scTcb == NODE_STATE(ksCurThread)) {
         userError("SchedContext_YieldTo: cannot seL4_SchedContext_YieldTo on self");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (sc->scTcb->tcbPriority > NODE_STATE(ksCurThread)->tcbMCP) {
         userError("SchedContext_YieldTo: insufficient mcp (%lu) to yield to a thread with prio (%lu)",
                   (unsigned long) NODE_STATE(ksCurThread)->tcbMCP, (unsigned long) sc->scTcb->tcbPriority);
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -240,7 +240,7 @@ static exception_t decodeSchedContext_YieldTo(sched_context_t *sc, word_t *buffe
     assert(NODE_STATE(ksCurThread)->tcbYieldTo == NULL);
     if (NODE_STATE(ksCurThread)->tcbYieldTo != NULL) {
         userError("SchedContext_YieldTo: cannot seL4_SchedContext_YieldTo to more than on SC at a time");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -267,7 +267,7 @@ exception_t decodeSchedContextInvocation(word_t label, cap_t cap, word_t *buffer
         /* no decode */
         if (sc->scTcb == NODE_STATE(ksCurThread)) {
             userError("SchedContext UnbindObject: cannot unbind sc of current thread");
-            current_syscall_error.type = seL4_IllegalOperation;
+            NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
             return EXCEPTION_SYSCALL_ERROR;
         }
         setThreadState(NODE_STATE(ksCurThread), ThreadState_Restart);
@@ -276,7 +276,7 @@ exception_t decodeSchedContextInvocation(word_t label, cap_t cap, word_t *buffer
         return decodeSchedContext_YieldTo(sc, buffer);
     default:
         userError("SchedContext invocation: Illegal operation attempted.");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 }

@@ -40,9 +40,9 @@ static exception_t checkPrio(prio_t prio, tcb_t *auth)
 
     /* can't assign a priority greater than our own mcp */
     if (prio > mcp) {
-        current_syscall_error.type = seL4_RangeError;
-        current_syscall_error.rangeErrorMin = seL4_MinPrio;
-        current_syscall_error.rangeErrorMax = mcp;
+        NODE_STATE(ksCurSyscallError).type = seL4_RangeError;
+        NODE_STATE(ksCurSyscallError).rangeErrorMin = seL4_MinPrio;
+        NODE_STATE(ksCurSyscallError).rangeErrorMax = mcp;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -397,7 +397,7 @@ exception_t lookupExtraCaps(tcb_t *thread, word_t *bufferPtr, seL4_MessageInfo_t
 
         lu_ret = lookupSlot(thread, cptr);
         if (lu_ret.status != EXCEPTION_NONE) {
-            current_fault = seL4_Fault_CapFault_new(cptr, false);
+            NODE_STATE(ksCurFault) = seL4_Fault_CapFault_new(cptr, false);
             return lu_ret.status;
         }
 
@@ -497,7 +497,7 @@ static exception_t decodeSetAffinity(cap_t cap, word_t length, word_t *buffer)
 
     if (length < 1) {
         userError("TCB SetAffinity: Truncated message.");
-        current_syscall_error.type = seL4_TruncatedMessage;
+        NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -506,7 +506,7 @@ static exception_t decodeSetAffinity(cap_t cap, word_t length, word_t *buffer)
     affinity = getSyscallArg(0, buffer);
     if (affinity >= ksNumCPUs) {
         userError("TCB SetAffinity: Requested CPU does not exist.");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -558,7 +558,7 @@ static exception_t decodeConfigureSingleStepping(cap_t cap, bool_t call, word_t 
 
     syserr = Arch_decodeConfigureSingleStepping(tcb, bp_num, n_instrs, false);
     if (syserr.type != seL4_NoError) {
-        current_syscall_error = syserr;
+        NODE_STATE(ksCurSyscallError) = syserr;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -596,68 +596,68 @@ static exception_t decodeSetBreakpoint(cap_t cap, word_t *buffer)
         userError("Debug: Invalid address %lx: bp addresses must be userspace "
                   "addresses.",
                   vaddr);
-        current_syscall_error.type = seL4_InvalidArgument;
-        current_syscall_error.invalidArgumentNumber = 1;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidArgument;
+        NODE_STATE(ksCurSyscallError).invalidArgumentNumber = 1;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (type != seL4_InstructionBreakpoint && type != seL4_DataBreakpoint) {
         userError("Debug: Unknown breakpoint type %lx.", type);
-        current_syscall_error.type = seL4_InvalidArgument;
-        current_syscall_error.invalidArgumentNumber = 2;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidArgument;
+        NODE_STATE(ksCurSyscallError).invalidArgumentNumber = 2;
         return EXCEPTION_SYSCALL_ERROR;
     } else if (type == seL4_InstructionBreakpoint) {
         if (size != 0) {
             userError("Debug: Instruction bps must have size of 0.");
-            current_syscall_error.type = seL4_InvalidArgument;
-            current_syscall_error.invalidArgumentNumber = 3;
+            NODE_STATE(ksCurSyscallError).type = seL4_InvalidArgument;
+            NODE_STATE(ksCurSyscallError).invalidArgumentNumber = 3;
             return EXCEPTION_SYSCALL_ERROR;
         }
         if (rw != seL4_BreakOnRead) {
             userError("Debug: Instruction bps must be break-on-read.");
-            current_syscall_error.type = seL4_InvalidArgument;
-            current_syscall_error.invalidArgumentNumber = 4;
+            NODE_STATE(ksCurSyscallError).type = seL4_InvalidArgument;
+            NODE_STATE(ksCurSyscallError).invalidArgumentNumber = 4;
             return EXCEPTION_SYSCALL_ERROR;
         }
         if ((seL4_FirstWatchpoint == -1 || bp_num >= seL4_FirstWatchpoint)
             && seL4_FirstBreakpoint != seL4_FirstWatchpoint) {
             userError("Debug: Can't specify a watchpoint ID with type seL4_InstructionBreakpoint.");
-            current_syscall_error.type = seL4_InvalidArgument;
-            current_syscall_error.invalidArgumentNumber = 2;
+            NODE_STATE(ksCurSyscallError).type = seL4_InvalidArgument;
+            NODE_STATE(ksCurSyscallError).invalidArgumentNumber = 2;
             return EXCEPTION_SYSCALL_ERROR;
         }
     } else if (type == seL4_DataBreakpoint) {
         if (size == 0) {
             userError("Debug: Data bps cannot have size of 0.");
-            current_syscall_error.type = seL4_InvalidArgument;
-            current_syscall_error.invalidArgumentNumber = 3;
+            NODE_STATE(ksCurSyscallError).type = seL4_InvalidArgument;
+            NODE_STATE(ksCurSyscallError).invalidArgumentNumber = 3;
             return EXCEPTION_SYSCALL_ERROR;
         }
         if (seL4_FirstWatchpoint != -1 && bp_num < seL4_FirstWatchpoint) {
             userError("Debug: Data watchpoints cannot specify non-data watchpoint ID.");
-            current_syscall_error.type = seL4_InvalidArgument;
-            current_syscall_error.invalidArgumentNumber = 2;
+            NODE_STATE(ksCurSyscallError).type = seL4_InvalidArgument;
+            NODE_STATE(ksCurSyscallError).invalidArgumentNumber = 2;
             return EXCEPTION_SYSCALL_ERROR;
         }
     } else if (type == seL4_SoftwareBreakRequest) {
         userError("Debug: Use a software breakpoint instruction to trigger a "
                   "software breakpoint.");
-        current_syscall_error.type = seL4_InvalidArgument;
-        current_syscall_error.invalidArgumentNumber = 2;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidArgument;
+        NODE_STATE(ksCurSyscallError).invalidArgumentNumber = 2;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (rw != seL4_BreakOnRead && rw != seL4_BreakOnWrite
         && rw != seL4_BreakOnReadWrite) {
         userError("Debug: Unknown access-type %lu.", rw);
-        current_syscall_error.type = seL4_InvalidArgument;
-        current_syscall_error.invalidArgumentNumber = 3;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidArgument;
+        NODE_STATE(ksCurSyscallError).invalidArgumentNumber = 3;
         return EXCEPTION_SYSCALL_ERROR;
     }
     if (size != 0 && size != 1 && size != 2 && size != 4 && size != 8) {
         userError("Debug: Invalid size %lu.", size);
-        current_syscall_error.type = seL4_InvalidArgument;
-        current_syscall_error.invalidArgumentNumber = 3;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidArgument;
+        NODE_STATE(ksCurSyscallError).invalidArgumentNumber = 3;
         return EXCEPTION_SYSCALL_ERROR;
     }
     if (size > 0 && vaddr & (size - 1)) {
@@ -677,13 +677,13 @@ static exception_t decodeSetBreakpoint(cap_t cap, word_t *buffer)
                   "rejected.\n",
                   vaddr, size);
 
-        current_syscall_error.type = seL4_AlignmentError;
+        NODE_STATE(ksCurSyscallError).type = seL4_AlignmentError;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     error = Arch_decodeSetBreakpoint(tcb, bp_num, vaddr, type, size, rw);
     if (error.type != seL4_NoError) {
-        current_syscall_error = error;
+        NODE_STATE(ksCurSyscallError) = error;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -723,7 +723,7 @@ static exception_t decodeGetBreakpoint(cap_t cap, bool_t call, word_t *buffer)
 
     error = Arch_decodeGetBreakpoint(tcb, bp_num);
     if (error.type != seL4_NoError) {
-        current_syscall_error = error;
+        NODE_STATE(ksCurSyscallError) = error;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -750,7 +750,7 @@ static exception_t decodeUnsetBreakpoint(cap_t cap, word_t *buffer)
 
     error = Arch_decodeUnsetBreakpoint(tcb, bp_num);
     if (error.type != seL4_NoError) {
-        current_syscall_error = error;
+        NODE_STATE(ksCurSyscallError) = error;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -777,7 +777,7 @@ static exception_t decodeSetTLSBase(cap_t cap, word_t length, word_t *buffer)
 
     if (length < 1) {
         userError("TCB SetTLSBase: Truncated message.");
-        current_syscall_error.type = seL4_TruncatedMessage;
+        NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -883,7 +883,7 @@ exception_t decodeTCBInvocation(word_t invLabel, word_t length, cap_t cap,
     default:
         /* Haskell: "throw IllegalOperation" */
         userError("TCB: Illegal operation.");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 }
@@ -904,7 +904,7 @@ exception_t decodeCopyRegisters(cap_t cap, word_t length, word_t *buffer)
 
     if (length < 1 || NODE_STATE(ksCurrentExtraCaps).excaprefs[0] == NULL) {
         userError("TCB CopyRegisters: Truncated message.");
-        current_syscall_error.type = seL4_TruncatedMessage;
+        NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -918,8 +918,8 @@ exception_t decodeCopyRegisters(cap_t cap, word_t length, word_t *buffer)
         srcTCB = TCB_PTR(cap_thread_cap_get_capTCBPtr(source_cap));
     } else {
         userError("TCB CopyRegisters: Invalid source TCB.");
-        current_syscall_error.type = seL4_InvalidCapability;
-        current_syscall_error.invalidCapNumber = 1;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 1;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -946,7 +946,7 @@ exception_t decodeReadRegisters(cap_t cap, word_t length, bool_t call,
 
     if (length < 2) {
         userError("TCB ReadRegisters: Truncated message.");
-        current_syscall_error.type = seL4_TruncatedMessage;
+        NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -956,9 +956,9 @@ exception_t decodeReadRegisters(cap_t cap, word_t length, bool_t call,
     if (n < 1 || n > n_frameRegisters + n_gpRegisters) {
         userError("TCB ReadRegisters: Attempted to read an invalid number of registers (%d).",
                   (int)n);
-        current_syscall_error.type = seL4_RangeError;
-        current_syscall_error.rangeErrorMin = 1;
-        current_syscall_error.rangeErrorMax = n_frameRegisters +
+        NODE_STATE(ksCurSyscallError).type = seL4_RangeError;
+        NODE_STATE(ksCurSyscallError).rangeErrorMin = 1;
+        NODE_STATE(ksCurSyscallError).rangeErrorMax = n_frameRegisters +
                                               n_gpRegisters;
         return EXCEPTION_SYSCALL_ERROR;
     }
@@ -968,7 +968,7 @@ exception_t decodeReadRegisters(cap_t cap, word_t length, bool_t call,
     thread = TCB_PTR(cap_thread_cap_get_capTCBPtr(cap));
     if (thread == NODE_STATE(ksCurThread)) {
         userError("TCB ReadRegisters: Attempted to read our own registers.");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -991,7 +991,7 @@ exception_t decodeWriteRegisters(cap_t cap, word_t length, word_t *buffer)
 
     if (length < 2) {
         userError("TCB WriteRegisters: Truncated message.");
-        current_syscall_error.type = seL4_TruncatedMessage;
+        NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -1001,7 +1001,7 @@ exception_t decodeWriteRegisters(cap_t cap, word_t length, word_t *buffer)
     if (length - 2 < w) {
         userError("TCB WriteRegisters: Message too short for requested write size (%d/%d).",
                   (int)(length - 2), (int)w);
-        current_syscall_error.type = seL4_TruncatedMessage;
+        NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -1010,7 +1010,7 @@ exception_t decodeWriteRegisters(cap_t cap, word_t length, word_t *buffer)
     thread = TCB_PTR(cap_thread_cap_get_capTCBPtr(cap));
     if (thread == NODE_STATE(ksCurThread)) {
         userError("TCB WriteRegisters: Attempted to write our own registers.");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -1028,7 +1028,7 @@ static bool_t validFaultHandler(cap_t cap)
         if (!cap_endpoint_cap_get_capCanSend(cap) ||
             (!cap_endpoint_cap_get_capCanGrant(cap) &&
              !cap_endpoint_cap_get_capCanGrantReply(cap))) {
-            current_syscall_error.type = seL4_InvalidCapability;
+            NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
             return false;
         }
         break;
@@ -1036,7 +1036,7 @@ static bool_t validFaultHandler(cap_t cap)
         /* just has no fault endpoint */
         break;
     default:
-        current_syscall_error.type = seL4_InvalidCapability;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
         return false;
     }
     return true;
@@ -1059,7 +1059,7 @@ exception_t decodeTCBConfigure(cap_t cap, word_t length, cte_t *slot, word_t *bu
         || NODE_STATE(ksCurrentExtraCaps).excaprefs[1] == NULL
         || NODE_STATE(ksCurrentExtraCaps).excaprefs[2] == NULL) {
         userError("TCB Configure: Truncated message.");
-        current_syscall_error.type = seL4_TruncatedMessage;
+        NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -1101,7 +1101,7 @@ exception_t decodeTCBConfigure(cap_t cap, word_t length, cte_t *slot, word_t *bu
         slotCapLongRunningDelete(
             TCB_PTR_CTE_PTR(cap_thread_cap_get_capTCBPtr(cap), tcbVTable))) {
         userError("TCB Configure: CSpace or VSpace currently being deleted.");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -1117,7 +1117,7 @@ exception_t decodeTCBConfigure(cap_t cap, word_t length, cte_t *slot, word_t *bu
 
     if (cap_get_capType(cRootCap) != cap_cnode_cap) {
         userError("TCB Configure: CSpace cap is invalid.");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -1133,7 +1133,7 @@ exception_t decodeTCBConfigure(cap_t cap, word_t length, cte_t *slot, word_t *bu
 
     if (!isValidVTableRoot(vRootCap)) {
         userError("TCB Configure: VSpace cap is invalid.");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -1164,7 +1164,7 @@ exception_t decodeSetPriority(cap_t cap, word_t length, word_t *buffer)
 {
     if (length < 1 || NODE_STATE(ksCurrentExtraCaps).excaprefs[0] == NULL) {
         userError("TCB SetPriority: Truncated message.");
-        current_syscall_error.type = seL4_TruncatedMessage;
+        NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -1173,8 +1173,8 @@ exception_t decodeSetPriority(cap_t cap, word_t length, word_t *buffer)
 
     if (cap_get_capType(authCap) != cap_thread_cap) {
         userError("Set priority: authority cap not a TCB.");
-        current_syscall_error.type = seL4_InvalidCapability;
-        current_syscall_error.invalidCapNumber = 1;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 1;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -1208,7 +1208,7 @@ exception_t decodeSetMCPriority(cap_t cap, word_t length, word_t *buffer)
 {
     if (length < 1 || NODE_STATE(ksCurrentExtraCaps).excaprefs[0] == NULL) {
         userError("TCB SetMCPriority: Truncated message.");
-        current_syscall_error.type = seL4_TruncatedMessage;
+        NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -1217,8 +1217,8 @@ exception_t decodeSetMCPriority(cap_t cap, word_t length, word_t *buffer)
 
     if (cap_get_capType(authCap) != cap_thread_cap) {
         userError("TCB SetMCPriority: authority cap not a TCB.");
-        current_syscall_error.type = seL4_InvalidCapability;
-        current_syscall_error.invalidCapNumber = 1;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 1;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -1262,7 +1262,7 @@ exception_t decodeSetTimeoutEndpoint(cap_t cap, cte_t *slot)
     /* timeout handler */
     if (!validFaultHandler(thCap)) {
         userError("TCB SetTimeoutEndpoint: timeout endpoint cap invalid.");
-        current_syscall_error.invalidCapNumber = 1;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 1;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -1290,7 +1290,7 @@ exception_t decodeSetSchedParams(cap_t cap, word_t length, word_t *buffer)
 #endif
        ) {
         userError("TCB SetSchedParams: Truncated message.");
-        current_syscall_error.type = seL4_TruncatedMessage;
+        NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -1305,8 +1305,8 @@ exception_t decodeSetSchedParams(cap_t cap, word_t length, word_t *buffer)
 
     if (cap_get_capType(authCap) != cap_thread_cap) {
         userError("TCB SetSchedParams: authority cap not a TCB.");
-        current_syscall_error.type = seL4_InvalidCapability;
-        current_syscall_error.invalidCapNumber = 1;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 1;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -1333,38 +1333,38 @@ exception_t decodeSetSchedParams(cap_t cap, word_t length, word_t *buffer)
         sc = SC_PTR(cap_sched_context_cap_get_capSCPtr(scCap));
         if (tcb->tcbSchedContext) {
             userError("TCB Configure: tcb already has a scheduling context.");
-            current_syscall_error.type = seL4_IllegalOperation;
+            NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
             return EXCEPTION_SYSCALL_ERROR;
         }
         if (sc->scTcb) {
             userError("TCB Configure: sched contextext already bound.");
-            current_syscall_error.type = seL4_IllegalOperation;
+            NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
             return EXCEPTION_SYSCALL_ERROR;
         }
         if (isBlocked(tcb) && !sc_released(sc)) {
             userError("TCB Configure: tcb blocked and scheduling context not schedulable.");
-            current_syscall_error.type = seL4_IllegalOperation;
+            NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
             return EXCEPTION_SYSCALL_ERROR;
         }
         break;
     case cap_null_cap:
         if (tcb == NODE_STATE(ksCurThread)) {
             userError("TCB SetSchedParams: Cannot change sched_context of current thread");
-            current_syscall_error.type = seL4_IllegalOperation;
+            NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
             return EXCEPTION_SYSCALL_ERROR;
         }
         break;
     default:
         userError("TCB Configure: sched context cap invalid.");
-        current_syscall_error.type = seL4_InvalidCapability;
-        current_syscall_error.invalidCapNumber = 2;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 2;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (!validFaultHandler(fhCap)) {
         userError("TCB Configure: fault endpoint cap invalid.");
-        current_syscall_error.type = seL4_InvalidCapability;
-        current_syscall_error.invalidCapNumber = 3;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 3;
         return EXCEPTION_SYSCALL_ERROR;
     }
 #endif
@@ -1400,7 +1400,7 @@ exception_t decodeSetIPCBuffer(cap_t cap, word_t length, cte_t *slot, word_t *bu
 
     if (length < 1 || NODE_STATE(ksCurrentExtraCaps).excaprefs[0] == NULL) {
         userError("TCB SetIPCBuffer: Truncated message.");
-        current_syscall_error.type = seL4_TruncatedMessage;
+        NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -1466,7 +1466,7 @@ exception_t decodeSetSpace(cap_t cap, word_t length, cte_t *slot, word_t *buffer
 #endif
        ) {
         userError("TCB SetSpace: Truncated message.");
-        current_syscall_error.type = seL4_TruncatedMessage;
+        NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -1496,7 +1496,7 @@ exception_t decodeSetSpace(cap_t cap, word_t length, cte_t *slot, word_t *buffer
         slotCapLongRunningDelete(
             TCB_PTR_CTE_PTR(cap_thread_cap_get_capTCBPtr(cap), tcbVTable))) {
         userError("TCB SetSpace: CSpace or VSpace currently being deleted.");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -1512,7 +1512,7 @@ exception_t decodeSetSpace(cap_t cap, word_t length, cte_t *slot, word_t *buffer
 
     if (cap_get_capType(cRootCap) != cap_cnode_cap) {
         userError("TCB SetSpace: Invalid CNode cap.");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -1528,7 +1528,7 @@ exception_t decodeSetSpace(cap_t cap, word_t length, cte_t *slot, word_t *buffer
 
     if (!isValidVTableRoot(vRootCap)) {
         userError("TCB SetSpace: Invalid VSpace cap.");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -1536,7 +1536,7 @@ exception_t decodeSetSpace(cap_t cap, word_t length, cte_t *slot, word_t *buffer
     /* fault handler */
     if (!validFaultHandler(fhCap)) {
         userError("TCB SetSpace: fault endpoint cap invalid.");
-        current_syscall_error.invalidCapNumber = 1;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 1;
         return EXCEPTION_SYSCALL_ERROR;
     }
 #endif
@@ -1567,36 +1567,36 @@ exception_t decodeDomainInvocation(word_t invLabel, word_t length, word_t *buffe
     cap_t tcap;
 
     if (unlikely(invLabel != DomainSetSet)) {
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (unlikely(length == 0)) {
         userError("Domain Configure: Truncated message.");
-        current_syscall_error.type = seL4_TruncatedMessage;
+        NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
     } else {
         domain = getSyscallArg(0, buffer);
         if (domain >= numDomains) {
             userError("Domain Configure: invalid domain (%lu >= %u).",
                       domain, numDomains);
-            current_syscall_error.type = seL4_InvalidArgument;
-            current_syscall_error.invalidArgumentNumber = 0;
+            NODE_STATE(ksCurSyscallError).type = seL4_InvalidArgument;
+            NODE_STATE(ksCurSyscallError).invalidArgumentNumber = 0;
             return EXCEPTION_SYSCALL_ERROR;
         }
     }
 
     if (unlikely(NODE_STATE(ksCurrentExtraCaps).excaprefs[0] == NULL)) {
         userError("Domain Configure: Truncated message.");
-        current_syscall_error.type = seL4_TruncatedMessage;
+        NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     tcap = NODE_STATE(ksCurrentExtraCaps).excaprefs[0]->cap;
     if (unlikely(cap_get_capType(tcap) != cap_thread_cap)) {
         userError("Domain Configure: thread cap required.");
-        current_syscall_error.type = seL4_InvalidArgument;
-        current_syscall_error.invalidArgumentNumber = 1;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidArgument;
+        NODE_STATE(ksCurSyscallError).invalidArgumentNumber = 1;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -1613,7 +1613,7 @@ exception_t decodeBindNotification(cap_t cap)
 
     if (NODE_STATE(ksCurrentExtraCaps).excaprefs[0] == NULL) {
         userError("TCB BindNotification: Truncated message.");
-        current_syscall_error.type = seL4_TruncatedMessage;
+        NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -1621,7 +1621,7 @@ exception_t decodeBindNotification(cap_t cap)
 
     if (tcb->tcbBoundNotification) {
         userError("TCB BindNotification: TCB already has a bound notification.");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -1631,20 +1631,20 @@ exception_t decodeBindNotification(cap_t cap)
         ntfnPtr = NTFN_PTR(cap_notification_cap_get_capNtfnPtr(ntfn_cap));
     } else {
         userError("TCB BindNotification: Notification is invalid.");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (!cap_notification_cap_get_capNtfnCanReceive(ntfn_cap)) {
         userError("TCB BindNotification: Insufficient access rights");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if ((tcb_t *)notification_ptr_get_ntfnQueue_head(ntfnPtr)
         || (tcb_t *)notification_ptr_get_ntfnBoundTCB(ntfnPtr)) {
         userError("TCB BindNotification: Notification cannot be bound.");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -1661,7 +1661,7 @@ exception_t decodeUnbindNotification(cap_t cap)
 
     if (!tcb->tcbBoundNotification) {
         userError("TCB UnbindNotification: TCB already has no bound Notification.");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -2060,32 +2060,32 @@ void setThreadName(tcb_t *tcb, const char *name)
 
 word_t setMRs_syscall_error(tcb_t *thread, word_t *receiveIPCBuffer)
 {
-    switch (current_syscall_error.type) {
+    switch (NODE_STATE(ksCurSyscallError).type) {
     case seL4_InvalidArgument:
         return setMR(thread, receiveIPCBuffer, 0,
-                     current_syscall_error.invalidArgumentNumber);
+                     NODE_STATE(ksCurSyscallError).invalidArgumentNumber);
 
     case seL4_InvalidCapability:
         return setMR(thread, receiveIPCBuffer, 0,
-                     current_syscall_error.invalidCapNumber);
+                     NODE_STATE(ksCurSyscallError).invalidCapNumber);
 
     case seL4_IllegalOperation:
         return 0;
 
     case seL4_RangeError:
         setMR(thread, receiveIPCBuffer, 0,
-              current_syscall_error.rangeErrorMin);
+              NODE_STATE(ksCurSyscallError).rangeErrorMin);
         return setMR(thread, receiveIPCBuffer, 1,
-                     current_syscall_error.rangeErrorMax);
+                     NODE_STATE(ksCurSyscallError).rangeErrorMax);
 
     case seL4_AlignmentError:
         return 0;
 
     case seL4_FailedLookup:
         setMR(thread, receiveIPCBuffer, 0,
-              current_syscall_error.failedLookupWasSource ? 1 : 0);
+              NODE_STATE(ksCurSyscallError).failedLookupWasSource ? 1 : 0);
         return setMRs_lookup_failure(thread, receiveIPCBuffer,
-                                     current_lookup_fault, 1);
+                                     NODE_STATE(ksCurLookupFault), 1);
 
     case seL4_TruncatedMessage:
     case seL4_DeleteFirst:
@@ -2093,7 +2093,7 @@ word_t setMRs_syscall_error(tcb_t *thread, word_t *receiveIPCBuffer)
         return 0;
     case seL4_NotEnoughMemory:
         return setMR(thread, receiveIPCBuffer, 0,
-                     current_syscall_error.memoryLeft);
+                     NODE_STATE(ksCurSyscallError).memoryLeft);
     default:
         fail("Invalid syscall error");
     }

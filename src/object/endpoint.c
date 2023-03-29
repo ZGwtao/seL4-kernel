@@ -509,7 +509,7 @@ void replyFromKernel_error(tcb_t *thread)
 #endif
 
     setRegister(thread, msgInfoRegister, wordFromMessageInfo(
-                    seL4_MessageInfo_new(current_syscall_error.type, 0, 0, len)));
+                    seL4_MessageInfo_new(NODE_STATE(ksCurSyscallError).type, 0, 0, len)));
 }
 
 void replyFromKernel_success_empty(tcb_t *thread)

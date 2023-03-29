@@ -71,33 +71,33 @@ lookupSlot_ret_t lookupSlotForCNodeOp(bool_t isSource, cap_t root, cptr_t capptr
     ret.slot = NULL;
 
     if (unlikely(cap_get_capType(root) != cap_cnode_cap)) {
-        current_syscall_error.type = seL4_FailedLookup;
-        current_syscall_error.failedLookupWasSource = isSource;
-        current_lookup_fault = lookup_fault_invalid_root_new();
+        NODE_STATE(ksCurSyscallError).type = seL4_FailedLookup;
+        NODE_STATE(ksCurSyscallError).failedLookupWasSource = isSource;
+        NODE_STATE(ksCurLookupFault) = lookup_fault_invalid_root_new();
         ret.status = EXCEPTION_SYSCALL_ERROR;
         return ret;
     }
 
     if (unlikely(depth < 1 || depth > wordBits)) {
-        current_syscall_error.type = seL4_RangeError;
-        current_syscall_error.rangeErrorMin = 1;
-        current_syscall_error.rangeErrorMax = wordBits;
+        NODE_STATE(ksCurSyscallError).type = seL4_RangeError;
+        NODE_STATE(ksCurSyscallError).rangeErrorMin = 1;
+        NODE_STATE(ksCurSyscallError).rangeErrorMax = wordBits;
         ret.status = EXCEPTION_SYSCALL_ERROR;
         return ret;
     }
     res_ret = resolveAddressBits(root, capptr, depth);
     if (unlikely(res_ret.status != EXCEPTION_NONE)) {
-        current_syscall_error.type = seL4_FailedLookup;
-        current_syscall_error.failedLookupWasSource = isSource;
-        /* current_lookup_fault will have been set by resolveAddressBits */
+        NODE_STATE(ksCurSyscallError).type = seL4_FailedLookup;
+        NODE_STATE(ksCurSyscallError).failedLookupWasSource = isSource;
+        /* NODE_STATE(ksCurLookupFault) will have been set by resolveAddressBits */
         ret.status = EXCEPTION_SYSCALL_ERROR;
         return ret;
     }
 
     if (unlikely(res_ret.bitsRemaining != 0)) {
-        current_syscall_error.type = seL4_FailedLookup;
-        current_syscall_error.failedLookupWasSource = isSource;
-        current_lookup_fault =
+        NODE_STATE(ksCurSyscallError).type = seL4_FailedLookup;
+        NODE_STATE(ksCurSyscallError).failedLookupWasSource = isSource;
+        NODE_STATE(ksCurLookupFault) =
             lookup_fault_depth_mismatch_new(0, res_ret.bitsRemaining);
         ret.status = EXCEPTION_SYSCALL_ERROR;
         return ret;
@@ -134,7 +134,7 @@ resolveAddressBits_ret_t resolveAddressBits(cap_t nodeCap, cptr_t capptr, word_t
     ret.slot = NULL;
 
     if (unlikely(cap_get_capType(nodeCap) != cap_cnode_cap)) {
-        current_lookup_fault = lookup_fault_invalid_root_new();
+        NODE_STATE(ksCurLookupFault) = lookup_fault_invalid_root_new();
         ret.status = EXCEPTION_LOOKUP_FAULT;
         return ret;
     }
@@ -155,14 +155,14 @@ resolveAddressBits_ret_t resolveAddressBits(cap_t nodeCap, cptr_t capptr, word_t
          */
         guard = (capptr >> ((n_bits - guardBits) & MASK(wordRadix))) & MASK(guardBits);
         if (unlikely(guardBits > n_bits || guard != capGuard)) {
-            current_lookup_fault =
+            NODE_STATE(ksCurLookupFault) =
                 lookup_fault_guard_mismatch_new(capGuard, n_bits, guardBits);
             ret.status = EXCEPTION_LOOKUP_FAULT;
             return ret;
         }
 
         if (unlikely(levelBits > n_bits)) {
-            current_lookup_fault =
+            NODE_STATE(ksCurLookupFault) =
                 lookup_fault_depth_mismatch_new(levelBits, n_bits);
             ret.status = EXCEPTION_LOOKUP_FAULT;
             return ret;

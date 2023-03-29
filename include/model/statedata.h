@@ -74,6 +74,10 @@ NODE_STATE_DECLARE(sched_context_t, *ksIdleSC);
 NODE_STATE_DECLARE(word_t, ksSyscallNumber);
 #endif
 
+NODE_STATE_DECLARE(lookup_fault_t, ksCurLookupFault);
+NODE_STATE_DECLARE(seL4_Fault_t, ksCurFault);
+NODE_STATE_DECLARE(syscall_error_t, ksCurSyscallError);
+
 #ifdef CONFIG_HAVE_FPU
 /* Current state installed in the FPU, or NULL if the FPU is currently invalid */
 NODE_STATE_DECLARE(user_fpu_state_t *, ksActiveFPUState);

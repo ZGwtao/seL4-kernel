@@ -165,13 +165,13 @@ exception_t decodeARMIOPTInvocation(
 
     if (NODE_STATE(ksCurrentExtraCaps).excaprefs[0] == NULL || length < 1) {
         userError("IOPTInvocation: Truncated message.");
-        current_syscall_error.type = seL4_TruncatedMessage;
+        NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (invLabel != ARMIOPageTableMap) {
         userError("IOPTInvocation: Invalid operation.");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -180,15 +180,15 @@ exception_t decodeARMIOPTInvocation(
 
     if (cap_io_page_table_cap_get_capIOPTIsMapped(cap)) {
         userError("IOPTMap: Cap already mapped.");
-        current_syscall_error.type = seL4_InvalidCapability;
-        current_syscall_error.invalidCapNumber = 0;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 0;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (cap_get_capType(io_space) != cap_io_space_cap) {
         userError("IOPTMap: Invalid IOSpace cap.");
-        current_syscall_error.type = seL4_InvalidCapability;
-        current_syscall_error.invalidCapNumber = 1;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 1;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -204,7 +204,7 @@ exception_t decodeARMIOPTInvocation(
 
     if (isIOPDEValid(lu_ret.iopdSlot)) {
         userError("IOPTMap: Delete first.");
-        current_syscall_error.type = seL4_DeleteFirst;
+        NODE_STATE(ksCurSyscallError).type = seL4_DeleteFirst;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -260,21 +260,21 @@ exception_t decodeARMIOMapInvocation(
 
     if (NODE_STATE(ksCurrentExtraCaps).excaprefs[0] == NULL || length < 2) {
         userError("IOMap: Truncated message.");
-        current_syscall_error.type = seL4_TruncatedMessage;
+        NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (generic_frame_cap_get_capFSize(cap) != ARMSmallPage) {
         userError("IOMap: Invalid cap type.");
-        current_syscall_error.type = seL4_InvalidCapability;
-        current_syscall_error.invalidCapNumber = 0;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 0;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (cap_small_frame_cap_get_capFMappedASID(cap) != asidInvalid) {
         userError("IOMap: Frame all ready mapped.");
-        current_syscall_error.type = seL4_InvalidCapability;
-        current_syscall_error.invalidCapNumber = 0;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 0;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -284,8 +284,8 @@ exception_t decodeARMIOMapInvocation(
 
     if (cap_get_capType(io_space) != cap_io_space_cap) {
         userError("IOMap: Invalid IOSpace cap.");
-        current_syscall_error.type = seL4_InvalidCapability;
-        current_syscall_error.invalidCapNumber = 1;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 1;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -297,14 +297,14 @@ exception_t decodeARMIOMapInvocation(
 
     lu_ret = lookupIOPTSlot(pd, io_address);
     if (lu_ret.status != EXCEPTION_NONE) {
-        current_syscall_error.type = seL4_FailedLookup;
-        current_syscall_error.failedLookupWasSource = false;
+        NODE_STATE(ksCurSyscallError).type = seL4_FailedLookup;
+        NODE_STATE(ksCurSyscallError).failedLookupWasSource = false;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (!isIOPTEEmpty(lu_ret.ioptSlot)) {
         userError("IOMap: Delete first.");
-        current_syscall_error.type = seL4_DeleteFirst;
+        NODE_STATE(ksCurSyscallError).type = seL4_DeleteFirst;
         return EXCEPTION_SYSCALL_ERROR;
     }
     frame_cap_rights = cap_small_frame_cap_get_capFVMRights(cap);
@@ -348,16 +348,16 @@ exception_t decodeARMIOMapInvocation(
                     );
         } else {
             userError("IOMap: Invalid argument.");
-            current_syscall_error.type = seL4_InvalidArgument;
-            current_syscall_error.invalidArgumentNumber = 0;
+            NODE_STATE(ksCurSyscallError).type = seL4_InvalidArgument;
+            NODE_STATE(ksCurSyscallError).invalidArgumentNumber = 0;
             return EXCEPTION_SYSCALL_ERROR;
         }
 
     } else {
         /* VMKernelOnly */
         userError("IOMap: Invalid argument.");
-        current_syscall_error.type = seL4_InvalidArgument;
-        current_syscall_error.invalidArgumentNumber = 0;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidArgument;
+        NODE_STATE(ksCurSyscallError).invalidArgumentNumber = 0;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -470,7 +470,7 @@ exception_t performPageInvocationUnmapIO(
 exception_t decodeARMIOSpaceInvocation(word_t invLabel, cap_t cap)
 {
     userError("IOSpace capability has no invocations");
-    current_syscall_error.type = seL4_IllegalOperation;
+    NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
     return EXCEPTION_SYSCALL_ERROR;
 }
 #endif /* end of CONFIG_TK1_SMMU */

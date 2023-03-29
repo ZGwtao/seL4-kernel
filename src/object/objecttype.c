@@ -643,22 +643,22 @@ exception_t decodeInvocation(word_t invLabel, word_t length,
     switch (cap_get_capType(cap)) {
     case cap_null_cap:
         userError("Attempted to invoke a null cap #%lu.", capIndex);
-        current_syscall_error.type = seL4_InvalidCapability;
-        current_syscall_error.invalidCapNumber = 0;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 0;
         return EXCEPTION_SYSCALL_ERROR;
 
     case cap_zombie_cap:
         userError("Attempted to invoke a zombie cap #%lu.", capIndex);
-        current_syscall_error.type = seL4_InvalidCapability;
-        current_syscall_error.invalidCapNumber = 0;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 0;
         return EXCEPTION_SYSCALL_ERROR;
 
     case cap_endpoint_cap:
         if (unlikely(!cap_endpoint_cap_get_capCanSend(cap))) {
             userError("Attempted to invoke a read-only endpoint cap #%lu.",
                       capIndex);
-            current_syscall_error.type = seL4_InvalidCapability;
-            current_syscall_error.invalidCapNumber = 0;
+            NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+            NODE_STATE(ksCurSyscallError).invalidCapNumber = 0;
             return EXCEPTION_SYSCALL_ERROR;
         }
 
@@ -681,8 +681,8 @@ exception_t decodeInvocation(word_t invLabel, word_t length,
         if (unlikely(!cap_notification_cap_get_capNtfnCanSend(cap))) {
             userError("Attempted to invoke a read-only notification cap #%lu.",
                       capIndex);
-            current_syscall_error.type = seL4_InvalidCapability;
-            current_syscall_error.invalidCapNumber = 0;
+            NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+            NODE_STATE(ksCurSyscallError).invalidCapNumber = 0;
             return EXCEPTION_SYSCALL_ERROR;
         }
 
@@ -704,8 +704,8 @@ exception_t decodeInvocation(word_t invLabel, word_t length,
         if (unlikely(cap_reply_cap_get_capReplyMaster(cap))) {
             userError("Attempted to invoke an invalid reply cap #%lu.",
                       capIndex);
-            current_syscall_error.type = seL4_InvalidCapability;
-            current_syscall_error.invalidCapNumber = 0;
+            NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+            NODE_STATE(ksCurSyscallError).invalidCapNumber = 0;
             return EXCEPTION_SYSCALL_ERROR;
         }
 
@@ -720,8 +720,8 @@ exception_t decodeInvocation(word_t invLabel, word_t length,
 #ifdef CONFIG_KERNEL_MCS
         if (unlikely(firstPhase)) {
             userError("Cannot invoke thread capabilities in the first phase of an invocation");
-            current_syscall_error.type = seL4_InvalidCapability;
-            current_syscall_error.invalidCapNumber = 0;
+            NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+            NODE_STATE(ksCurSyscallError).invalidCapNumber = 0;
             return EXCEPTION_SYSCALL_ERROR;
         }
 #endif
@@ -731,8 +731,8 @@ exception_t decodeInvocation(word_t invLabel, word_t length,
 #ifdef CONFIG_KERNEL_MCS
         if (unlikely(firstPhase)) {
             userError("Cannot invoke domain capabilities in the first phase of an invocation");
-            current_syscall_error.type = seL4_InvalidCapability;
-            current_syscall_error.invalidCapNumber = 0;
+            NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+            NODE_STATE(ksCurSyscallError).invalidCapNumber = 0;
             return EXCEPTION_SYSCALL_ERROR;
         }
 #endif
@@ -742,8 +742,8 @@ exception_t decodeInvocation(word_t invLabel, word_t length,
 #ifdef CONFIG_KERNEL_MCS
         if (unlikely(firstPhase)) {
             userError("Cannot invoke cnode capabilities in the first phase of an invocation");
-            current_syscall_error.type = seL4_InvalidCapability;
-            current_syscall_error.invalidCapNumber = 0;
+            NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+            NODE_STATE(ksCurSyscallError).invalidCapNumber = 0;
             return EXCEPTION_SYSCALL_ERROR;
         }
 #endif
@@ -763,8 +763,8 @@ exception_t decodeInvocation(word_t invLabel, word_t length,
     case cap_sched_control_cap:
         if (unlikely(firstPhase)) {
             userError("Cannot invoke sched control capabilities in the first phase of an invocation");
-            current_syscall_error.type = seL4_InvalidCapability;
-            current_syscall_error.invalidCapNumber = 0;
+            NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+            NODE_STATE(ksCurSyscallError).invalidCapNumber = 0;
             return EXCEPTION_SYSCALL_ERROR;
         }
         return decodeSchedControlInvocation(invLabel, cap, length, buffer);
@@ -772,8 +772,8 @@ exception_t decodeInvocation(word_t invLabel, word_t length,
     case cap_sched_context_cap:
         if (unlikely(firstPhase)) {
             userError("Cannot invoke sched context capabilities in the first phase of an invocation");
-            current_syscall_error.type = seL4_InvalidCapability;
-            current_syscall_error.invalidCapNumber = 0;
+            NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+            NODE_STATE(ksCurSyscallError).invalidCapNumber = 0;
             return EXCEPTION_SYSCALL_ERROR;
         }
         return decodeSchedContextInvocation(invLabel, cap, buffer);

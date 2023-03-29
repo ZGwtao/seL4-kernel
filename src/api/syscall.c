@@ -217,7 +217,7 @@ exception_t handleUnknownSyscall(word_t w)
             return Arch_setTLSRegister(tls_base);
         }
 #endif
-        current_fault = seL4_Fault_UnknownSyscall_new(w);
+        NODE_STATE(ksCurFault) = seL4_Fault_UnknownSyscall_new(w);
         handleFault(NODE_STATE(ksCurThread));
     })
 
@@ -230,7 +230,7 @@ exception_t handleUnknownSyscall(word_t w)
 exception_t handleUserLevelFault(word_t w_a, word_t w_b)
 {
     MCS_DO_IF_BUDGET({
-        current_fault = seL4_Fault_UserException_new(w_a, w_b);
+        NODE_STATE(ksCurFault) = seL4_Fault_UserException_new(w_a, w_b);
         handleFault(NODE_STATE(ksCurThread));
     })
     schedule();
@@ -333,7 +333,7 @@ static exception_t handleInvocation(bool_t isCall, bool_t isBlocking)
 
     if (unlikely(lu_ret.status != EXCEPTION_NONE)) {
         userError("Invocation of invalid cap #%lu.", cptr);
-        current_fault = seL4_Fault_CapFault_new(cptr, false);
+        NODE_STATE(ksCurFault) = seL4_Fault_CapFault_new(cptr, false);
 
         if (isBlocking) {
             handleFault(thread);
@@ -399,14 +399,14 @@ static inline lookupCap_ret_t lookupReply(void)
     lookupCap_ret_t lu_ret = lookupCap(NODE_STATE(ksCurThread), replyCPtr);
     if (unlikely(lu_ret.status != EXCEPTION_NONE)) {
         userError("Reply cap lookup failed");
-        current_fault = seL4_Fault_CapFault_new(replyCPtr, true);
+        NODE_STATE(ksCurFault) = seL4_Fault_CapFault_new(replyCPtr, true);
         handleFault(NODE_STATE(ksCurThread));
         return lu_ret;
     }
 
     if (unlikely(cap_get_capType(lu_ret.cap) != cap_reply_cap)) {
         userError("Cap in reply slot is not a reply");
-        current_fault = seL4_Fault_CapFault_new(replyCPtr, true);
+        NODE_STATE(ksCurFault) = seL4_Fault_CapFault_new(replyCPtr, true);
         handleFault(NODE_STATE(ksCurThread));
         lu_ret.status = EXCEPTION_FAULT;
         return lu_ret;
@@ -855,8 +855,8 @@ static void handleRecv(bool_t isBlocking)
     lu_ret = lookupCap(NODE_STATE(ksCurThread), epCPtr);
 
     if (unlikely(lu_ret.status != EXCEPTION_NONE)) {
-        /* current_lookup_fault has been set by lookupCap */
-        current_fault = seL4_Fault_CapFault_new(epCPtr, true);
+        /* NODE_STATE(ksCurLookupFault) has been set by lookupCap */
+        NODE_STATE(ksCurFault) = seL4_Fault_CapFault_new(epCPtr, true);
         handleFault(NODE_STATE(ksCurThread));
         return;
     }
@@ -864,8 +864,8 @@ static void handleRecv(bool_t isBlocking)
     switch (cap_get_capType(lu_ret.cap)) {
     case cap_endpoint_cap:
         if (unlikely(!cap_endpoint_cap_get_capCanReceive(lu_ret.cap))) {
-            current_lookup_fault = lookup_fault_missing_capability_new(0);
-            current_fault = seL4_Fault_CapFault_new(epCPtr, true);
+            NODE_STATE(ksCurLookupFault) = lookup_fault_missing_capability_new(0);
+            NODE_STATE(ksCurFault) = seL4_Fault_CapFault_new(epCPtr, true);
             handleFault(NODE_STATE(ksCurThread));
             break;
         }
@@ -895,8 +895,8 @@ static void handleRecv(bool_t isBlocking)
         boundTCB = (tcb_t *)notification_ptr_get_ntfnBoundTCB(ntfnPtr);
         if (unlikely(!cap_notification_cap_get_capNtfnCanReceive(lu_ret.cap)
                      || (boundTCB && boundTCB != NODE_STATE(ksCurThread)))) {
-            current_lookup_fault = lookup_fault_missing_capability_new(0);
-            current_fault = seL4_Fault_CapFault_new(epCPtr, true);
+            NODE_STATE(ksCurLookupFault) = lookup_fault_missing_capability_new(0);
+            NODE_STATE(ksCurFault) = seL4_Fault_CapFault_new(epCPtr, true);
             handleFault(NODE_STATE(ksCurThread));
             break;
         }
@@ -905,8 +905,8 @@ static void handleRecv(bool_t isBlocking)
         break;
     }
     default:
-        current_lookup_fault = lookup_fault_missing_capability_new(0);
-        current_fault = seL4_Fault_CapFault_new(epCPtr, true);
+        NODE_STATE(ksCurLookupFault) = lookup_fault_missing_capability_new(0);
+        NODE_STATE(ksCurFault) = seL4_Fault_CapFault_new(epCPtr, true);
         handleFault(NODE_STATE(ksCurThread));
         break;
     }
