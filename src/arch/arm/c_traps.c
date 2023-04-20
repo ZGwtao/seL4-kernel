@@ -166,15 +166,8 @@ bool_t lock_shared_heuristic(word_t cptr, word_t msgInfo, syscall_t syscall)
     if (syscall == SysYield) compatible_syscall = true;
     if (syscall == SysNBSendRecv) compatible_syscall = true;
     if (syscall == SysNBSendWait) compatible_syscall = true;
-    if (!compatible_syscall) {
-        return false;
-    }
 
-    if (seL4_MessageInfo_get_extraCaps(messageInfoFromWord(msgInfo)) != 0) {
-        return false;
-    }
-
-    return true;
+    return compatible_syscall;
 }
 #endif
 

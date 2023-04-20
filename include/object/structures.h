@@ -157,7 +157,7 @@ struct cte {
 };
 typedef struct cte cte_t;
 
-#define nullMDBNode mdb_node_new(0, false, false, 0)
+#define nullMDBNode mdb_node_new(0, 0, false, false, 0)
 
 /* Thread state */
 enum _thread_state {

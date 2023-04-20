@@ -332,7 +332,7 @@ static seL4_MessageInfo_t transferCaps(seL4_MessageInfo_t info,
                 break;
             }
 
-            cteInsert(dc_ret.cap, slot, destSlot);
+            cteInsertShared(dc_ret.cap, slot, destSlot);
 
             destSlot = NULL;
         }

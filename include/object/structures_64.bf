@@ -266,11 +266,12 @@ block notification {
 
 -- Mapping database (MDB) node: size = 16 bytes
 block mdb_node {
+    field lock 8
 #if BF_CANONICAL_RANGE == 48
-    padding 16
+    padding 8
     field_high mdbNext 46
 #elif BF_CANONICAL_RANGE == 39
-    padding 25
+    padding 17
     field_high mdbNext 37
 #else
 #error "Unspecified canonical address range"

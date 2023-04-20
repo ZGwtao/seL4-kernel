@@ -369,3 +369,15 @@ void scheduler_lock_release(seL4_Word core) {}
 #define reply_object_lock_release(reply_ptr) {}
 #endif
 
+#ifndef DISABLE_MDB_NODE_LOCKS
+#define mdb_node_lock_get(mdb_node_ptr) (((uint8_t *)(mdb_node_ptr)) + 15)
+#define mdb_node_lock_acquire(mdb_node_ptr) do { \
+    spinlock_acquire(mdb_node_lock_get(mdb_node_ptr)); \
+} while (0);
+#define mdb_node_lock_try_acquire(mdb_node_ptr) (spinlock_try_acquire(mdb_node_lock_get(mdb_node_ptr)))
+#define mdb_node_lock_release(mdb_node_ptr) do { spinlock_release(mdb_node_lock_get(mdb_node_ptr)); } while (0);
+#else
+#define mdb_node_lock_acquire(mdb_node_ptr) {}
+#define mdb_node_lock_try_acquire(mdb_node_ptr) (1)
+#define mdb_node_lock_release(mdb_node_ptr) {}
+#endif

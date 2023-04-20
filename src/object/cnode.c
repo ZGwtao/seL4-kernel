@@ -401,10 +401,73 @@ static void setUntypedCapAsFull(cap_t srcCap, cap_t newCap, cte_t *srcSlot)
              == cap_untyped_cap_get_capPtr(newCap))
             && (cap_untyped_cap_get_capBlockSize(newCap)
                 == cap_untyped_cap_get_capBlockSize(srcCap))) {
+            assert(clh_is_self_in_queue());
             cap_untyped_cap_ptr_set_capFreeIndex(&(srcSlot->cap),
                                                  MAX_FREE_INDEX(cap_untyped_cap_get_capBlockSize(srcCap)));
         }
     }
+}
+
+bool_t try_set_null_cap_atomic(cap_t *ptr, cap_t val)
+{
+    assert(sizeof (cap_t) == 2 * sizeof (word_t));
+    assert(cap_get_capType(val) != cap_null_cap);
+
+    if (cap_get_capType(*ptr) != cap_null_cap) {
+        return false;
+    }
+    word_t *words = (word_t *)ptr;
+    word_t old = words[0];
+    word_t new = ((word_t *)&val)[0];
+    bool_t claimed = __atomic_compare_exchange_n(&words[0], &old, new, false, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED);
+    if (!claimed) {
+        return false;
+    }
+    words[1] = ((word_t *)&val)[1];
+    return true;
+}
+
+void cteInsertShared(cap_t newCap, cte_t *srcSlot, cte_t *destSlot)
+{
+    mdb_node_t srcMDB, newMDB;
+    cap_t srcCap;
+    bool_t newCapIsRevocable;
+
+    assert(srcSlot != NULL);
+    assert(destSlot != NULL);
+
+    srcMDB = srcSlot->cteMDBNode;
+    srcCap = srcSlot->cap;
+
+    newCapIsRevocable = isCapRevocable(newCap, srcCap);
+
+    newMDB = mdb_node_set_mdbPrev(srcMDB, CTE_REF(srcSlot));
+    newMDB = mdb_node_set_mdbRevocable(newMDB, newCapIsRevocable);
+    newMDB = mdb_node_set_mdbFirstBadged(newMDB, newCapIsRevocable);
+
+    /* Haskell error: "cteInsert to non-empty destination" */
+    assert(cap_get_capType(destSlot->cap) == cap_null_cap);
+    /* Haskell error: "cteInsert: mdb entry must be empty" */
+    assert((cte_t *)mdb_node_get_mdbNext(destSlot->cteMDBNode) == NULL &&
+           (cte_t *)mdb_node_get_mdbPrev(destSlot->cteMDBNode) == NULL);
+
+    /* Prevent parent untyped cap from being used again if creating a child
+     * untyped from it. */
+    setUntypedCapAsFull(srcCap, newCap, srcSlot);
+
+    if (!try_set_null_cap_atomic(&destSlot->cap, newCap)) {
+        return;
+    }
+    destSlot->cteMDBNode = newMDB;
+
+    mdb_node_lock_acquire(&srcSlot->cteMDBNode);
+    mdb_node_ptr_set_mdbNext(&srcSlot->cteMDBNode, CTE_REF(destSlot));
+    if (mdb_node_get_mdbNext(newMDB)) {
+        mdb_node_ptr_set_mdbPrev(
+            &CTE_PTR(mdb_node_get_mdbNext(newMDB))->cteMDBNode,
+            CTE_REF(destSlot));
+    }
+    mdb_node_lock_release(&srcSlot->cteMDBNode);
 }
 
 void cteInsert(cap_t newCap, cte_t *srcSlot, cte_t *destSlot)
@@ -748,7 +811,7 @@ void insertNewCap(cte_t *parent, cte_t *slot, cap_t cap)
 
     next = CTE_PTR(mdb_node_get_mdbNext(parent->cteMDBNode));
     slot->cap = cap;
-    slot->cteMDBNode = mdb_node_new(CTE_REF(next), true, true, CTE_REF(parent));
+    slot->cteMDBNode = mdb_node_new(0, CTE_REF(next), true, true, CTE_REF(parent));
     if (next) {
         mdb_node_ptr_set_mdbPrev(&next->cteMDBNode, CTE_REF(slot));
     }

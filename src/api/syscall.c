@@ -430,9 +430,6 @@ static exception_t handleSend(bool_t call, bool_t isBlocking, bool_t canDonate)
     }
 
     seL4_MessageInfo_t info = messageInfoFromWord(getRegister(NODE_STATE(ksCurThread), msgInfoRegister));
-    if (seL4_MessageInfo_get_extraCaps(info) != 0) {
-        retry_syscall_exclusive();
-    }
 
     switch (cap_get_capType(lu_ret.cap)) {
     case cap_endpoint_cap: {
@@ -620,9 +617,6 @@ static void handleReplyRecvShared(void)
 
     buffer = lookupIPCBuffer(false, NODE_STATE(ksCurThread));
     info = messageInfoFromWord(getRegister(NODE_STATE(ksCurThread), msgInfoRegister));
-    if (seL4_MessageInfo_get_extraCaps(info) != 0) {
-        retry_syscall_exclusive();
-    }
 
     length = seL4_MessageInfo_get_length(info);
     if (unlikely(length > n_msgRegisters && !buffer)) {
@@ -662,32 +656,10 @@ static void handleReplyRecvShared(void)
             }
         }
 
-
-        bool_t receiver_has_cap_slot = false;
-        bool_t sender_is_transferring_cap = false;
-
-        word_t *receiver_buffer = lookupIPCBuffer(true, NODE_STATE(ksCurThread));
-        receiver_has_cap_slot = getReceiveSlots(NODE_STATE(ksCurThread), receiver_buffer) != NULL;
-
         cap_t ep_cap = recv_cap;
         endpoint_t *epptr = EP_PTR(cap_endpoint_cap_get_capEPPtr(ep_cap));
 
         ep_lock_acquire(epptr);
-
-        if (endpoint_ptr_get_state(epptr) == EPState_Send) {
-            tcb_queue_t queue;
-            tcb_t *sender;
-            queue = ep_ptr_get_queue(epptr);
-            sender = queue.head;
-            seL4_MessageInfo_t info = messageInfoFromWord(getRegister(sender, msgInfoRegister));
-            sender_is_transferring_cap = (seL4_MessageInfo_get_extraCaps(info) != 0);
-        }
-
-        if (receiver_has_cap_slot && sender_is_transferring_cap) {
-            ep_lock_release(epptr);
-            retry_syscall_exclusive();
-            break;
-        }
 
         reply_object_lock_acquire(replyptr);
 
@@ -778,31 +750,10 @@ static void handleRecvShared(bool_t isBlocking, bool_t canReply)
             }
         }
 
-        bool_t receiver_has_cap_slot = false;
-        bool_t sender_is_transferring_cap = false;
-
-        word_t *receiver_buffer = lookupIPCBuffer(true, NODE_STATE(ksCurThread));
-        receiver_has_cap_slot = getReceiveSlots(NODE_STATE(ksCurThread), receiver_buffer) != NULL;
-
         cap_t ep_cap = lu_ret.cap;
         endpoint_t *epptr = EP_PTR(cap_endpoint_cap_get_capEPPtr(ep_cap));
 
         ep_lock_acquire(epptr);
-
-        if (endpoint_ptr_get_state(epptr) == EPState_Send) {
-            tcb_queue_t queue;
-            tcb_t *sender;
-            queue = ep_ptr_get_queue(epptr);
-            sender = queue.head;
-            seL4_MessageInfo_t info = messageInfoFromWord(getRegister(sender, msgInfoRegister));
-            sender_is_transferring_cap = (seL4_MessageInfo_get_extraCaps(info) != 0);
-        }
-
-        if (receiver_has_cap_slot && sender_is_transferring_cap) {
-            ep_lock_release(epptr);
-            retry_syscall_exclusive();
-            break;
-        }
 
         if (replyptr) {
             reply_object_lock_acquire(replyptr);
@@ -918,18 +869,9 @@ void handleNBSendRecv(bool_t canReply)
     lookupCap_ret_t lu_ret;
 
     seL4_MessageInfo_t info = messageInfoFromWord(getRegister(NODE_STATE(ksCurThread), msgInfoRegister));
-    if (seL4_MessageInfo_get_extraCaps(info) != 0) {
-        retry_syscall_exclusive();
-    }
 
     word_t *buffer = lookupIPCBuffer(false, NODE_STATE(ksCurThread));
     info = messageInfoFromWord(getRegister(NODE_STATE(ksCurThread), msgInfoRegister));
-    if (seL4_MessageInfo_get_extraCaps(info) != 0) {
-        retry_syscall_exclusive();
-    }
-    if (getReceiveSlots(NODE_STATE(ksCurThread), buffer) != NULL) {
-        retry_syscall_exclusive();
-    }
 
     cptr_t dest_cptr = getNBSendRecvDest();
     lu_ret = lookupCap(NODE_STATE(ksCurThread), dest_cptr);
