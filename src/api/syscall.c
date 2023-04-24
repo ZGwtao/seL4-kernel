@@ -416,27 +416,56 @@ static inline lookupCap_ret_t lookupReply(void)
 }
 
 #ifdef CONFIG_KERNEL_MCS
-static exception_t handleSend(bool_t call, bool_t isBlocking, bool_t canDonate, cptr_t cptr)
+static void handleSend(bool_t call, bool_t isBlocking, bool_t canDonate, cptr_t cptr)
 {
     lookupCap_ret_t lu_ret;
+    exception_t status;
 
     /* faulting section */
     lu_ret = lookupCap(NODE_STATE(ksCurThread), cptr);
     if (unlikely(lu_ret.status != EXCEPTION_NONE)) {
-        retry_syscall_exclusive();
-    }
+        userError("Invocation of invalid cap #%lu.", cptr);
+        NODE_STATE(ksCurFault) = seL4_Fault_CapFault_new(cptr, false);
 
-    switch (cap_get_capType(lu_ret.cap)) {
-    case cap_endpoint_cap: {
-        if (unlikely(!cap_endpoint_cap_get_capCanSend(lu_ret.cap))) {
-            retry_syscall_exclusive();
+        if (isBlocking) {
+            handleFaultShared(NODE_STATE(ksCurThread));
         }
 
-        endpoint_t *epptr = EP_PTR(cap_endpoint_cap_get_capEPPtr(lu_ret.cap));
-        word_t badge = cap_endpoint_cap_get_capEPBadge(lu_ret.cap);
-        bool_t canGrant = cap_endpoint_cap_get_capCanGrant(lu_ret.cap);
-        bool_t canGrantReply = cap_endpoint_cap_get_capCanGrantReply(lu_ret.cap);
+        return;
+    }
+    cap_t cap = lu_ret.cap;
 
+    seL4_MessageInfo_t info = messageInfoFromWord(getRegister(NODE_STATE(ksCurThread), msgInfoRegister));
+    word_t *buffer = lookupIPCBuffer(false, NODE_STATE(ksCurThread));
+    status = lookupExtraCaps(NODE_STATE(ksCurThread), buffer, info);
+    if (unlikely(status != EXCEPTION_NONE)) {
+        userError("Lookup of extra caps failed.");
+        if (isBlocking) {
+            handleFaultShared(NODE_STATE(ksCurThread));
+        }
+        return;
+    }
+
+    word_t length = seL4_MessageInfo_get_length(info);
+    if (unlikely(length > n_msgRegisters && !buffer)) {
+        length = n_msgRegisters;
+    }
+
+    switch (cap_get_capType(cap)) {
+    case cap_endpoint_cap: {
+        if (unlikely(!cap_endpoint_cap_get_capCanSend(lu_ret.cap))) {
+            userError("Attempted to invoke a read-only endpoint cap #%lu.", cptr);
+            NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+            NODE_STATE(ksCurSyscallError).invalidCapNumber = 0;
+            if (call) {
+                replyFromKernel_error(NODE_STATE(ksCurThread));
+            }
+            return;
+        }
+
+        setThreadState(NODE_STATE(ksCurThread), ThreadState_Restart);
+
+        endpoint_t *epptr = EP_PTR(cap_endpoint_cap_get_capEPPtr(cap));
         ep_lock_acquire(epptr);
 
         reply_t *reply = NULL;
@@ -449,8 +478,16 @@ static exception_t handleSend(bool_t call, bool_t isBlocking, bool_t canDonate, 
             }
         }
 
-        setThreadState(NODE_STATE(ksCurThread), ThreadState_Restart);
-        sendIPCShared(isBlocking, call, badge, canGrant, canGrantReply, canDonate, NODE_STATE(ksCurThread), epptr);
+        sendIPCShared(
+            isBlocking,
+            call,
+            cap_endpoint_cap_get_capEPBadge(cap),
+            cap_endpoint_cap_get_capCanGrant(cap),
+            cap_endpoint_cap_get_capCanGrantReply(cap),
+            canDonate,
+            NODE_STATE(ksCurThread),
+            epptr
+        );
         if (unlikely(thread_state_get_tsType(NODE_STATE(ksCurThread)->tcbState) == ThreadState_Restart)) {
             setThreadState(NODE_STATE(ksCurThread), ThreadState_Running);
         }
@@ -462,19 +499,24 @@ static exception_t handleSend(bool_t call, bool_t isBlocking, bool_t canDonate, 
         break;
     }
     case cap_notification_cap: {
-        if (unlikely(!cap_notification_cap_get_capNtfnCanSend(lu_ret.cap))) {
-            retry_syscall_exclusive();
+        if (unlikely(!cap_notification_cap_get_capNtfnCanSend(cap))) {
+            userError("Attempted to invoke a read-only notification cap #%lu.",
+                      cptr);
+            NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+            NODE_STATE(ksCurSyscallError).invalidCapNumber = 0;
+            if (call) {
+                replyFromKernel_error(NODE_STATE(ksCurThread));
+            }
+            return;
         }
 
+        setThreadState(NODE_STATE(ksCurThread), ThreadState_Restart);
+
         notification_t *ntfnptr = NTFN_PTR(cap_notification_cap_get_capNtfnPtr(lu_ret.cap));
-
-        tcb_t *bound_tcb = (tcb_t *)notification_ptr_get_ntfnBoundTCB(ntfnptr);
-
         ntfn_lock_acquire(ntfnptr);
 
+        tcb_t *bound_tcb = (tcb_t *)notification_ptr_get_ntfnBoundTCB(ntfnptr);
         word_t badge = cap_notification_cap_get_capNtfnBadge(lu_ret.cap);
-
-        setThreadState(NODE_STATE(ksCurThread), ThreadState_Restart);
 
         bool_t ntfn_idle = notification_ptr_get_state(ntfnptr) == NtfnState_Idle;
         if (bound_tcb && ntfn_idle) {
@@ -492,18 +534,17 @@ static exception_t handleSend(bool_t call, bool_t isBlocking, bool_t canDonate, 
             sendSignalShared(ntfnptr, badge);
         }
 
-
-    if (unlikely(thread_state_get_tsType(NODE_STATE(ksCurThread)->tcbState) == ThreadState_Restart)) {
-        setThreadState(NODE_STATE(ksCurThread), ThreadState_Running);
-    }
+        if (unlikely(thread_state_get_tsType(NODE_STATE(ksCurThread)->tcbState) == ThreadState_Restart)) {
+            setThreadState(NODE_STATE(ksCurThread), ThreadState_Running);
+        }
 
         ntfn_lock_release(ntfnptr);
         break;
     }
     case cap_reply_cap: {
+        setThreadState(NODE_STATE(ksCurThread), ThreadState_Restart);
         reply_t *reply = REPLY_PTR(cap_reply_cap_get_capReplyPtr(lu_ret.cap));
         reply_object_lock_acquire(reply);
-        setThreadState(NODE_STATE(ksCurThread), ThreadState_Restart);
         doReplyTransfer(NODE_STATE(ksCurThread), reply, cap_reply_cap_get_capReplyCanGrant(lu_ret.cap));
         if (unlikely(thread_state_get_tsType(NODE_STATE(ksCurThread)->tcbState) == ThreadState_Restart)) {
             setThreadState(NODE_STATE(ksCurThread), ThreadState_Running);
@@ -515,7 +556,7 @@ static exception_t handleSend(bool_t call, bool_t isBlocking, bool_t canDonate, 
         retry_syscall_exclusive();
     }
 
-    return EXCEPTION_NONE;
+    return;
 }
 #endif
 
@@ -616,13 +657,18 @@ static void handleRecvShared(bool_t isBlocking, bool_t canReply)
     cptr = getRegister(NODE_STATE(ksCurThread), capRegister);
     lu_ret = lookupCap(NODE_STATE(ksCurThread), cptr);
     if (unlikely(lu_ret.status != EXCEPTION_NONE)) {
-        retry_syscall_exclusive();
+        /* NODE_STATE(ksCurLookupFault) has been set by lookupCap */
+        NODE_STATE(ksCurFault) = seL4_Fault_CapFault_new(cptr, true);
+        handleFaultShared(NODE_STATE(ksCurThread));
+        return;
     }
 
     switch (cap_get_capType(lu_ret.cap)) {
     case cap_endpoint_cap: {
         if (unlikely(!cap_endpoint_cap_get_capCanReceive(lu_ret.cap))) {
-            retry_syscall_exclusive();
+            NODE_STATE(ksCurLookupFault) = lookup_fault_missing_capability_new(0);
+            NODE_STATE(ksCurFault) = seL4_Fault_CapFault_new(cptr, true);
+            handleFaultShared(NODE_STATE(ksCurThread));
             break;
         }
 
@@ -672,7 +718,9 @@ static void handleRecvShared(bool_t isBlocking, bool_t canReply)
         bound_tcb = (tcb_t *)notification_ptr_get_ntfnBoundTCB(ntfn_ptr);
         if (unlikely(!cap_notification_cap_get_capNtfnCanReceive(lu_ret.cap)
                      || (bound_tcb && bound_tcb != NODE_STATE(ksCurThread)))) {
-            retry_syscall_exclusive();
+            NODE_STATE(ksCurLookupFault) = lookup_fault_missing_capability_new(0);
+            NODE_STATE(ksCurFault) = seL4_Fault_CapFault_new(cptr, true);
+            handleFaultShared(NODE_STATE(ksCurThread));
             break;
         }
 
@@ -683,7 +731,9 @@ static void handleRecvShared(bool_t isBlocking, bool_t canReply)
         break;
     }
     default:
-        retry_syscall_exclusive();
+        NODE_STATE(ksCurLookupFault) = lookup_fault_missing_capability_new(0);
+        NODE_STATE(ksCurFault) = seL4_Fault_CapFault_new(cptr, true);
+        handleFaultShared(NODE_STATE(ksCurThread));
         break;
     }
 }

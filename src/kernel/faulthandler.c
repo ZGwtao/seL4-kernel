@@ -21,6 +21,15 @@ void handleFault(tcb_t *tptr)
     }
 }
 
+void handleFaultShared(tcb_t *tptr)
+{
+    bool_t hasFaultHandler = sendFaultIPCShared(tptr, TCB_PTR_CTE_PTR(tptr, tcbFaultHandler)->cap,
+                                          tptr->tcbSchedContext != NULL);
+    if (!hasFaultHandler) {
+        handleNoFaultHandler(tptr);
+    }
+}
+
 void handleTimeout(tcb_t *tptr)
 {
     assert(validTimeoutHandler(tptr));
@@ -41,6 +50,43 @@ bool_t sendFaultIPC(tcb_t *tptr, cap_t handlerCap, bool_t can_donate)
                 cap_endpoint_cap_get_capCanGrantReply(handlerCap),
                 can_donate, tptr,
                 EP_PTR(cap_endpoint_cap_get_capEPPtr(handlerCap)));
+
+        return true;
+    } else {
+        assert(cap_get_capType(handlerCap) == cap_null_cap);
+        return false;
+    }
+}
+
+bool_t sendFaultIPCShared(tcb_t *tptr, cap_t handlerCap, bool_t can_donate)
+{
+    if (cap_get_capType(handlerCap) == cap_endpoint_cap) {
+        assert(cap_endpoint_cap_get_capCanSend(handlerCap));
+        assert(cap_endpoint_cap_get_capCanGrant(handlerCap) ||
+               cap_endpoint_cap_get_capCanGrantReply(handlerCap));
+
+        tptr->tcbFault = NODE_STATE(ksCurFault);
+        endpoint_t *epptr = EP_PTR(cap_endpoint_cap_get_capEPPtr(handlerCap));
+        ep_lock_acquire(epptr);
+        reply_t *reply = NULL;
+        if (endpoint_ptr_get_state(epptr) == EPState_Recv) {
+            tcb_queue_t queue = ep_ptr_get_queue(epptr);
+            tcb_t *dest = queue.head;
+            reply = REPLY_PTR(thread_state_get_replyObject(dest->tcbState));
+            if (reply) {
+                reply_object_lock_acquire(reply);
+            }
+        }
+        sendIPCShared(true, false,
+                cap_endpoint_cap_get_capEPBadge(handlerCap),
+                cap_endpoint_cap_get_capCanGrant(handlerCap),
+                cap_endpoint_cap_get_capCanGrantReply(handlerCap),
+                can_donate, tptr,
+                epptr);
+        if (reply) {
+            reply_object_lock_release(reply);
+        }
+        ep_lock_release(epptr);
 
         return true;
     } else {
