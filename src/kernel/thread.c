@@ -125,54 +125,6 @@ void doIPCTransfer(tcb_t *sender, endpoint_t *endpoint, word_t badge,
 }
 
 #ifdef CONFIG_KERNEL_MCS
-void doReplyTransferShared(tcb_t *sender, reply_t *reply)
-{
-    if (reply->replyTCB == NULL ||
-        thread_state_get_tsType(reply->replyTCB->tcbState) != ThreadState_BlockedOnReply) {
-        /* nothing to do */
-        return;
-    }
-
-    tcb_t *receiver = reply->replyTCB;
-    reply_remove(reply, receiver);
-    assert(thread_state_get_replyObject(receiver->tcbState) == REPLY_REF(0));
-    assert(reply->replyTCB == NULL);
-
-    if (sc_sporadic(receiver->tcbSchedContext)
-        && receiver->tcbSchedContext != NODE_STATE_ON_CORE(ksCurSC, receiver->tcbSchedContext->scCore)) {
-        refill_unblock_check(receiver->tcbSchedContext);
-    }
-
-    word_t fault_type = seL4_Fault_get_seL4_FaultType(receiver->tcbFault);
-    if (likely(fault_type == seL4_Fault_NullFault)) {
-        doIPCTransfer(sender, NULL, 0, false, receiver);
-        setThreadState(receiver, ThreadState_Running);
-    } else {
-        bool_t restart = handleFaultReply(receiver, sender);
-        receiver->tcbFault = seL4_Fault_NullFault_new();
-        if (restart) {
-            setThreadState(receiver, ThreadState_Restart);
-        } else {
-            setThreadState(receiver, ThreadState_Inactive);
-        }
-    }
-
-    if (receiver->tcbSchedContext && isRunnable(receiver)) {
-        if ((refill_ready(receiver->tcbSchedContext) && refill_sufficient(receiver->tcbSchedContext, 0))) {
-            possibleSwitchTo(receiver);
-        } else {
-            if (validTimeoutHandler(receiver) && fault_type != seL4_Fault_Timeout) {
-                NODE_STATE(ksCurFault) = seL4_Fault_Timeout_new(receiver->tcbSchedContext->scBadge);
-                handleTimeout(receiver);
-            } else {
-                postpone(receiver->tcbSchedContext);
-            }
-        }
-    }
-}
-#endif
-
-#ifdef CONFIG_KERNEL_MCS
 void doReplyTransfer(tcb_t *sender, reply_t *reply, bool_t grant)
 #else
 void doReplyTransfer(tcb_t *sender, tcb_t *receiver, cte_t *slot, bool_t grant)
