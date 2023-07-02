@@ -74,7 +74,6 @@ void sendIPCShared(bool_t blocking, bool_t do_call, word_t badge,
         }
 
         /* Do the transfer */
-        assert(seL4_Fault_get_seL4_FaultType(thread->tcbFault) == seL4_Fault_NullFault);
         doIPCTransfer(thread, epptr, badge, canGrant, dest);
 
         reply_t *reply = REPLY_PTR(thread_state_get_replyObject(dest->tcbState));
