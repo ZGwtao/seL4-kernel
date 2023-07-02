@@ -2440,6 +2440,7 @@ void kernelDataAbort(word_t pc)
     printf("Faulting instruction: 0x%"SEL4_PRIx_word"\n", pc);
     printf("FAR: 0x%"SEL4_PRIx_word" ESR (DFSR): 0x%"SEL4_PRIx_word"\n",
            getFAR(), getDFSR());
+    printf("LOCK: %s\n", does_self_own_read_lock() ? "READ" : (clh_is_self_in_queue() ? "WRITE" : "NONE"));
     halt();
 }
 #endif /* CONFIG_DEBUG_BUILD */
