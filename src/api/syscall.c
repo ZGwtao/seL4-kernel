@@ -891,12 +891,12 @@ exception_t handleSyscallShared(syscall_t syscall)
             break;
         }
         case SysNBSendRecv: {
-            handleSend(false, false, false, getNBSendRecvDest());
+            handleSend(false, false, true, getNBSendRecvDest());
             handleRecvShared(true, true);
             break;
         }
         case SysNBSendWait: {
-            handleSend(false, false, false, getRegister(NODE_STATE(ksCurThread), replyRegister));
+            handleSend(false, false, true, getRegister(NODE_STATE(ksCurThread), replyRegister));
             handleRecvShared(true, false);
             break;
         }
