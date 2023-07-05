@@ -300,6 +300,13 @@ config_option(
     DEFAULT_DISABLED OFF
 )
 
+config_option(
+    KernelFineGrainedLocking FINE_GRAINED_LOCKING "Enable fine-grained locking"
+    DEFAULT OFF
+    DEPENDS "KernelEnableSMPSupport; KernelIsMCS; KernelSel4ArchAarch64; NOT KernelVerificationBuild"
+    DEFAULT_DISABLED OFF
+)
+
 find_file(
     KernelDomainSchedule default_domain.c
     PATHS src/config
