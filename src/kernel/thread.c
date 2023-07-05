@@ -181,6 +181,7 @@ void doReplyTransfer(tcb_t *sender, tcb_t *receiver, cte_t *slot, bool_t grant)
 
 #ifdef CONFIG_KERNEL_MCS
     if (receiver->tcbSchedContext && isRunnable(receiver)) {
+        scheduler_lock_acquire(receiver->tcbAffinity);
         if ((refill_ready(receiver->tcbSchedContext) && refill_sufficient(receiver->tcbSchedContext, 0))) {
             possibleSwitchTo(receiver);
         } else {
@@ -191,6 +192,7 @@ void doReplyTransfer(tcb_t *sender, tcb_t *receiver, cte_t *slot, bool_t grant)
                 postpone(receiver->tcbSchedContext);
             }
         }
+        scheduler_lock_release(receiver->tcbAffinity);
     }
 #endif
 }
