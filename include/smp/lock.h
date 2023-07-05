@@ -286,7 +286,6 @@ void spinlock_acquire(uint8_t *lock)
     while (!__atomic_compare_exchange_n(lock, &expected, (uint8_t)(getCurrentCPUIndex()+1), true, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) {
         expected = 0;
     }
-//    __atomic_thread_fence(__ATOMIC_SEQ_CST);
 }
 
 static inline
@@ -299,7 +298,6 @@ int spinlock_try_acquire(uint8_t *lock)
     if (!__atomic_compare_exchange_n(lock, &expected, (uint8_t)(getCurrentCPUIndex()+1), false, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) {
         return 0;
     }
-//    __atomic_thread_fence(__ATOMIC_SEQ_CST);
     return 1;
 }
 
@@ -309,7 +307,6 @@ void spinlock_release(uint8_t *lock)
 {
     if (clh_is_self_in_queue())
         return;
-//    __atomic_thread_fence(__ATOMIC_SEQ_CST);
     __atomic_store_n(lock, (uint8_t)0, __ATOMIC_RELEASE);
 }
 
