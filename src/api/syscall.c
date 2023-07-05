@@ -575,42 +575,6 @@ static inline lookupCap_ret_t lookupReplyShared(void)
     return lu_ret;
 }
 
-static void handleReply(bool_t canDonate, bool_t canGrant)
-{
-    seL4_MessageInfo_t info;
-    word_t *buffer;
-    word_t length;
-    tcb_t *thread;
-    lookupCap_ret_t lu_ret;
-    reply_t *replyptr;
-
-    thread = NODE_STATE(ksCurThread);
-    buffer = lookupIPCBuffer(false, thread);
-    info = messageInfoFromWord(getRegister(thread, msgInfoRegister));
-
-    if (seL4_MessageInfo_get_extraCaps(info) != 0) {
-        retry_syscall_exclusive();
-    }
-
-    length = seL4_MessageInfo_get_length(info);
-    if (unlikely(length > n_msgRegisters && !buffer)) {
-        length = n_msgRegisters;
-    }
-
-    lu_ret = lookupReplyShared();
-    if (unlikely(lu_ret.status != EXCEPTION_NONE)) {
-        retry_syscall_exclusive();
-    }
-    replyptr = REPLY_PTR(cap_reply_cap_get_capReplyPtr(lu_ret.cap));
-
-    reply_object_lock_acquire(replyptr);
-
-    setThreadState(thread, ThreadState_Restart);
-    doReplyTransferShared(thread, replyptr);
-
-    reply_object_lock_release(replyptr);
-}
-
 #else
 static void handleReply(void)
 {
