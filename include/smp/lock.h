@@ -65,6 +65,9 @@ BOOT_CODE void clh_lock_init(void);
 extern word_t scheduler_locks[CONFIG_MAX_NUM_NODES];
 extern word_t scheduler_locks_held_by_node[CONFIG_MAX_NUM_NODES][CONFIG_MAX_NUM_NODES];
 
+extern word_t pseudobkl;
+extern word_t pseudorwl;
+
 static inline bool_t FORCE_INLINE clh_is_ipi_pending(word_t cpu)
 {
     return big_kernel_lock.node_owners[cpu].ipi == 1;
@@ -378,3 +381,49 @@ void scheduler_lock_release(seL4_Word core) {}
 #define mdb_node_lock_try_acquire(mdb_node_ptr) (1)
 #define mdb_node_lock_release(mdb_node_ptr) {}
 #endif
+
+#define pseudobkl_acquire() do { \
+    spinlock_acquire((uint8_t *)&pseudobkl); \
+} while (0);
+#define pseudobkl_release() do { spinlock_release((uint8_t *)&pseudobkl); } while (0);
+
+void pseudorwl_acquire_r(void) {
+    if (clh_is_self_in_queue())
+        return;
+    for (word_t i = 0; i < 1000000; i++) {
+        word_t expected = pseudorwl;
+        if (expected != 999) {
+            if (__atomic_compare_exchange_n(&pseudorwl, &expected, expected+1, true, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) {
+                return;
+            }
+        }
+    }
+    printf("deadlock\n");
+    assert(false);
+}
+
+void pseudorwl_acquire_w(void) {
+    if (clh_is_self_in_queue())
+        return;
+    for (word_t i = 0; i < 1000000; i++) {
+        word_t expected = 0;
+        if (__atomic_compare_exchange_n(&pseudorwl, &expected, 999, true, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) {
+            return;
+        }
+    }
+    printf("deadlock\n");
+    assert(false);
+}
+
+void pseudorwl_release_r(void) {
+    if (clh_is_self_in_queue())
+        return;
+    __atomic_fetch_sub(&pseudorwl, 1, __ATOMIC_RELEASE);
+}
+
+void pseudorwl_release_w(void) {
+    if (clh_is_self_in_queue())
+        return;
+    assert(pseudorwl == 999);
+    __atomic_store_n(&pseudorwl, 0, __ATOMIC_RELEASE);
+}
