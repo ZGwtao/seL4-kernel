@@ -20,7 +20,9 @@ exception_t invokeCNodeMove(cap_t cap, cte_t *srcSlot, cte_t *destSlot);
 exception_t invokeCNodeRotate(cap_t cap1, cap_t cap2, cte_t *slot1,
                               cte_t *slot2, cte_t *slot3);
 void cteInsert(cap_t newCap, cte_t *srcSlot, cte_t *destSlot);
-void cteInsertShared(cap_t newCap, cte_t *srcSlot, cte_t *destSlot);
+#ifdef CONFIG_FINE_GRAINED_LOCKING
+void cteInsert_atomic(cap_t newCap, cte_t *srcSlot, cte_t *destSlot);
+#endif
 void cteMove(cap_t newCap, cte_t *srcSlot, cte_t *destSlot);
 void capSwapForDelete(cte_t *slot1, cte_t *slot2);
 void cteSwap(cap_t cap1, cte_t *slot1, cap_t cap2, cte_t *slot2);

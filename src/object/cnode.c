@@ -408,6 +408,7 @@ static void setUntypedCapAsFull(cap_t srcCap, cap_t newCap, cte_t *srcSlot)
     }
 }
 
+#ifdef CONFIG_FINE_GRAINED_LOCKING
 bool_t try_set_null_cap_atomic(cap_t *ptr, cap_t val)
 {
     assert(sizeof (cap_t) == 2 * sizeof (word_t));
@@ -419,7 +420,14 @@ bool_t try_set_null_cap_atomic(cap_t *ptr, cap_t val)
     word_t *words = (word_t *)ptr;
     word_t old = words[0];
     word_t new = ((word_t *)&val)[0];
-    bool_t claimed = __atomic_compare_exchange_n(&words[0], &old, new, false, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED);
+    bool_t claimed = __atomic_compare_exchange_n(
+        &words[0],
+        &old,
+        new,
+        false,
+        __ATOMIC_ACQUIRE,
+        __ATOMIC_RELAXED
+    );
     if (!claimed) {
         return false;
     }
@@ -427,14 +435,11 @@ bool_t try_set_null_cap_atomic(cap_t *ptr, cap_t val)
     return true;
 }
 
-void cteInsertShared(cap_t newCap, cte_t *srcSlot, cte_t *destSlot)
+void cteInsert_atomic(cap_t newCap, cte_t *srcSlot, cte_t *destSlot)
 {
     mdb_node_t srcMDB, newMDB;
     cap_t srcCap;
     bool_t newCapIsRevocable;
-
-    assert(srcSlot != NULL);
-    assert(destSlot != NULL);
 
     srcMDB = srcSlot->cteMDBNode;
     srcCap = srcSlot->cap;
@@ -445,20 +450,14 @@ void cteInsertShared(cap_t newCap, cte_t *srcSlot, cte_t *destSlot)
     newMDB = mdb_node_set_mdbRevocable(newMDB, newCapIsRevocable);
     newMDB = mdb_node_set_mdbFirstBadged(newMDB, newCapIsRevocable);
 
-    /* Haskell error: "cteInsert to non-empty destination" */
-    assert(cap_get_capType(destSlot->cap) == cap_null_cap);
-    /* Haskell error: "cteInsert: mdb entry must be empty" */
-    assert((cte_t *)mdb_node_get_mdbNext(destSlot->cteMDBNode) == NULL &&
-           (cte_t *)mdb_node_get_mdbPrev(destSlot->cteMDBNode) == NULL);
-
-    /* Prevent parent untyped cap from being used again if creating a child
-     * untyped from it. */
-    setUntypedCapAsFull(srcCap, newCap, srcSlot);
-
     if (!try_set_null_cap_atomic(&destSlot->cap, newCap)) {
         return;
     }
     destSlot->cteMDBNode = newMDB;
+
+    /* Prevent parent untyped cap from being used again if creating a child
+     * untyped from it. */
+    setUntypedCapAsFull(srcCap, newCap, srcSlot);
 
     mdb_node_lock_acquire(&srcSlot->cteMDBNode);
     mdb_node_ptr_set_mdbNext(&srcSlot->cteMDBNode, CTE_REF(destSlot));
@@ -469,6 +468,7 @@ void cteInsertShared(cap_t newCap, cte_t *srcSlot, cte_t *destSlot)
     }
     mdb_node_lock_release(&srcSlot->cteMDBNode);
 }
+#endif
 
 void cteInsert(cap_t newCap, cte_t *srcSlot, cte_t *destSlot)
 {

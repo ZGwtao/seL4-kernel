@@ -59,104 +59,89 @@ static inline void maybeDonateSchedContext(tcb_t *tcb, notification_t *ntfnPtr)
     }
 #endif
 
-void sendSignalBlockedBoundTCB(notification_t *ntfn, tcb_t *tcb, word_t badge)
+#ifdef CONFIG_FINE_GRAINED_LOCKING
+struct lbo_ret {
+    bool_t success;
+    endpoint_t *blocking_ep;
+    reply_t *reply;
+};
+typedef struct lbo_ret lbo_ret_t;
+
+lbo_ret_t lock_blocking_objects(tcb_t *tcb)
 {
-    /* Send and start thread running */
-    cancelIPCShared(tcb);
-    setThreadState(tcb, ThreadState_Running);
-    setRegister(tcb, badgeRegister, badge);
-    MCS_DO_IF_SC(tcb, ntfn, {
-        possibleSwitchTo(tcb);
-    })
+    assert(tcb);
+
+    thread_state_t *state = &tcb->tcbState;
+    if (thread_state_ptr_get_tsType(state) != ThreadState_BlockedOnReceive) {
+        return (lbo_ret_t){ .success = true, 0 };
+    }
+
+    endpoint_t *blocking_ep = EP_PTR(thread_state_ptr_get_blockingObject(state));
+    if (!blocking_ep) {
+        return (lbo_ret_t){ .success = true, 0 };
+    }
+    ep_lock_acquire(blocking_ep);
+
+    state = &tcb->tcbState;
+    if (EP_PTR(thread_state_ptr_get_blockingObject(state)) != blocking_ep) {
+        ep_lock_release(blocking_ep);
+        return (lbo_ret_t){ .success = false, 0 };
+    }
+
+    reply_t *reply = REPLY_PTR(thread_state_get_replyObject(*state));
+    if (reply) {
+        reply_object_lock_acquire(reply, "sendSignal");
+    }
+
+    return (lbo_ret_t){
+        .success = true,
+        .blocking_ep = blocking_ep,
+        .reply = reply,
+    };
 }
 
-void sendSignalShared(notification_t *ntfnPtr, word_t badge)
+void unlock_blocking_objects(lbo_ret_t bo)
 {
-    switch (notification_ptr_get_state(ntfnPtr)) {
-    case NtfnState_Idle: {
-#ifdef CONFIG_VTX
-        tcb_t *tcb = (tcb_t *)notification_ptr_get_ntfnBoundTCB(ntfnPtr);
-        /* Check if we are bound and that thread is waiting for a message */
-        if (tcb && thread_state_ptr_get_tsType(&tcb->tcbState) == ThreadState_RunningVM) {
-                fail("VTX not implemented");
-        }
-#endif
-        ntfn_set_active(ntfnPtr, badge);
-        break;
+    if (bo.reply) {
+        reply_object_lock_release(bo.reply, "sendSignal");
     }
-    case NtfnState_Waiting: {
-        tcb_queue_t ntfn_queue;
-        tcb_t *dest;
-
-        ntfn_queue = ntfn_ptr_get_queue(ntfnPtr);
-        dest = ntfn_queue.head;
-
-        /* Haskell error "WaitingNtfn Notification must have non-empty queue" */
-        assert(dest);
-
-        /* Dequeue TCB */
-        ntfn_queue = tcbEPDequeue(dest, ntfn_queue);
-        ntfn_ptr_set_queue(ntfnPtr, ntfn_queue);
-
-        /* set the thread state to idle if the queue is empty */
-        if (!ntfn_queue.head) {
-            notification_ptr_set_state(ntfnPtr, NtfnState_Idle);
-        }
-
-        setThreadState(dest, ThreadState_Running);
-        setRegister(dest, badgeRegister, badge);
-        {
-            word_t affinity = dest->tcbAffinity;
-            scheduler_lock_acquire(affinity);
-            MCS_DO_IF_SC(dest, ntfnPtr, {
-                possibleSwitchTo(dest);
-            })
-            assert(affinity == dest->tcbAffinity);
-            scheduler_lock_release(affinity);
-        }
-
-
-        if (sc_sporadic(dest->tcbSchedContext)) {
-            /* We know that the receiver can't have the current SC
-             * as its own SC as this point as it should still be
-             * associated with the current thread.
-             * This check is added here to reduce the cost of
-             * proving this to be true as a short-term stop-gap. */
-            assert(dest->tcbSchedContext != NODE_STATE(ksCurSC));
-            if (dest->tcbSchedContext != NODE_STATE(ksCurSC)) {
-                refill_unblock_check(dest->tcbSchedContext);
-            }
-        }
-        break;
-    }
-
-    case NtfnState_Active: {
-        word_t badge2;
-
-        badge2 = notification_ptr_get_ntfnMsgIdentifier(ntfnPtr);
-        badge2 |= badge;
-
-        notification_ptr_set_ntfnMsgIdentifier(ntfnPtr, badge2);
-        break;
-    }
+    if (bo.blocking_ep) {
+        ep_lock_release(bo.blocking_ep);
     }
 }
+#endif /* CONFIG_FINE_GRAINED_LOCKING */
 
 void sendSignal(notification_t *ntfnPtr, word_t badge)
 {
+#ifdef CONFIG_FINE_GRAINED_LOCKING
+    ntfn_lock_acquire(ntfnPtr);
+#endif
+
     switch (notification_ptr_get_state(ntfnPtr)) {
     case NtfnState_Idle: {
         tcb_t *tcb = (tcb_t *)notification_ptr_get_ntfnBoundTCB(ntfnPtr);
         /* Check if we are bound and that thread is waiting for a message */
         if (tcb) {
+#ifdef CONFIG_FINE_GRAINED_LOCKING
+            lbo_ret_t lbo_ret = {0};
+            while (!lbo_ret.success) {
+                lbo_ret = lock_blocking_objects(tcb);
+            }
+#endif
             if (thread_state_ptr_get_tsType(&tcb->tcbState) == ThreadState_BlockedOnReceive) {
                 /* Send and start thread running */
                 cancelIPC(tcb);
                 setThreadState(tcb, ThreadState_Running);
                 setRegister(tcb, badgeRegister, badge);
+#ifdef CONFIG_FINE_GRAINED_LOCKING
+                scheduler_lock_acquire(tcb->tcbAffinity);
+#endif
                 MCS_DO_IF_SC(tcb, ntfnPtr, {
                     possibleSwitchTo(tcb);
                 })
+#ifdef CONFIG_FINE_GRAINED_LOCKING
+                scheduler_lock_release(tcb->tcbAffinity);
+#endif
 #ifdef CONFIG_KERNEL_MCS
                 if (sc_sporadic(tcb->tcbSchedContext)) {
                     /* We know that the tcb can't have the current SC
@@ -212,6 +197,9 @@ void sendSignal(notification_t *ntfnPtr, word_t badge)
                  */
                 ntfn_set_active(ntfnPtr, badge);
             }
+#ifdef CONFIG_FINE_GRAINED_LOCKING
+            unlock_blocking_objects(lbo_ret);
+#endif
         } else {
             ntfn_set_active(ntfnPtr, badge);
         }
@@ -238,9 +226,15 @@ void sendSignal(notification_t *ntfnPtr, word_t badge)
 
         setThreadState(dest, ThreadState_Running);
         setRegister(dest, badgeRegister, badge);
+#ifdef CONFIG_FINE_GRAINED_LOCKING
+        scheduler_lock_acquire(dest->tcbAffinity);
+#endif
         MCS_DO_IF_SC(dest, ntfnPtr, {
             possibleSwitchTo(dest);
         })
+#ifdef CONFIG_FINE_GRAINED_LOCKING
+        scheduler_lock_release(dest->tcbAffinity);
+#endif
 
 #ifdef CONFIG_KERNEL_MCS
         if (sc_sporadic(dest->tcbSchedContext)) {
@@ -268,55 +262,20 @@ void sendSignal(notification_t *ntfnPtr, word_t badge)
         break;
     }
     }
-}
 
-#ifdef CONFIG_KERNEL_MCS
-void receiveSignalShared(tcb_t *thread, notification_t *ntfn_ptr, bool_t isBlocking)
-{
-    switch (notification_ptr_get_state(ntfn_ptr)) {
-    case NtfnState_Idle:
-    case NtfnState_Waiting:
-        if (isBlocking) {
-            tcb_queue_t ntfn_queue;
-            /* Block thread on notification object */
-            thread_state_ptr_set_tsType(&thread->tcbState, ThreadState_BlockedOnNotification);
-            thread_state_ptr_set_blockingObject(&thread->tcbState, NTFN_REF(ntfn_ptr));
-
-            scheduler_lock_acquire(getCurrentCPUIndex());
-            scheduleTCB(thread);
-
-            /* Enqueue TCB */
-            ntfn_queue = ntfn_ptr_get_queue(ntfn_ptr);
-            ntfn_queue = tcbEPAppend(thread, ntfn_queue);
-
-            notification_ptr_set_state(ntfn_ptr, NtfnState_Waiting);
-            ntfn_ptr_set_queue(ntfn_ptr, ntfn_queue);
-
-            maybeReturnSchedContext(ntfn_ptr, thread);
-            scheduler_lock_release(getCurrentCPUIndex());
-        } else {
-            doNBRecvFailedTransfer(thread);
-        }
-        break;
-    case NtfnState_Active:
-        setRegister(thread, badgeRegister, notification_ptr_get_ntfnMsgIdentifier(ntfn_ptr));
-        notification_ptr_set_state(ntfn_ptr, NtfnState_Idle);
-        maybeDonateSchedContext(thread, ntfn_ptr);
-        // If the SC has been donated to the current thread (in a reply_recv, send_recv scenario) then
-        // we may need to perform refill_unblock_check if the SC is becoming activated.
-        if (thread->tcbSchedContext != NODE_STATE(ksCurSC) && sc_sporadic(thread->tcbSchedContext)) {
-            refill_unblock_check(thread->tcbSchedContext);
-        }
-        break;
-    }
-}
+#ifdef CONFIG_FINE_GRAINED_LOCKING
+    ntfn_lock_release(ntfnPtr);
 #endif
+}
 
 void receiveSignal(tcb_t *thread, cap_t cap, bool_t isBlocking)
 {
     notification_t *ntfnPtr;
 
     ntfnPtr = NTFN_PTR(cap_notification_cap_get_capNtfnPtr(cap));
+#ifdef CONFIG_FINE_GRAINED_LOCKING
+    ntfn_lock_acquire(ntfnPtr);
+#endif
 
     switch (notification_ptr_get_state(ntfnPtr)) {
     case NtfnState_Idle:
@@ -329,6 +288,9 @@ void receiveSignal(tcb_t *thread, cap_t cap, bool_t isBlocking)
                                         ThreadState_BlockedOnNotification);
             thread_state_ptr_set_blockingObject(&thread->tcbState,
                                                 NTFN_REF(ntfnPtr));
+#ifdef CONFIG_FINE_GRAINED_LOCKING
+            scheduler_lock_acquire(getCurrentCPUIndex());
+#endif
             scheduleTCB(thread);
 
             /* Enqueue TCB */
@@ -340,6 +302,9 @@ void receiveSignal(tcb_t *thread, cap_t cap, bool_t isBlocking)
 
 #ifdef CONFIG_KERNEL_MCS
             maybeReturnSchedContext(ntfnPtr, thread);
+#endif
+#ifdef CONFIG_FINE_GRAINED_LOCKING
+            scheduler_lock_release(getCurrentCPUIndex());
 #endif
         } else {
             doNBRecvFailedTransfer(thread);
@@ -363,6 +328,9 @@ void receiveSignal(tcb_t *thread, cap_t cap, bool_t isBlocking)
 #endif
         break;
     }
+#ifdef CONFIG_FINE_GRAINED_LOCKING
+    ntfn_lock_release(ntfnPtr);
+#endif
 }
 
 void cancelAllSignals(notification_t *ntfnPtr)

@@ -308,7 +308,7 @@ void NORETURN fastpath_reply_recv(word_t cptr, word_t msgInfo)
     if (unlikely(reply_ptr->replyTCB == NULL ||
                  call_stack_get_isHead(reply_ptr->replyNext) == 0 ||
                  SC_PTR(call_stack_get_callStackPtr(reply_ptr->replyNext)) != NODE_STATE(ksCurThread)->tcbSchedContext)) {
-        reply_object_lock_release(reply_ptr);
+        reply_object_lock_release(reply_ptr, "fastpath");
         slowpathShared(SysReplyRecv);
     }
 
@@ -333,14 +333,14 @@ void NORETURN fastpath_reply_recv(word_t cptr, word_t msgInfo)
     /* Check it's an endpoint */
     if (unlikely(!cap_capType_equals(ep_cap, cap_endpoint_cap) ||
                  !cap_endpoint_cap_get_capCanReceive(ep_cap))) {
-        reply_object_lock_release(reply_ptr);
+        reply_object_lock_release(reply_ptr, "fastpath");
         slowpathShared(SysReplyRecv);
     }
 
     /* Check there is nothing waiting on the notification */
     if (unlikely(NODE_STATE(ksCurThread)->tcbBoundNotification &&
                  notification_ptr_get_state(NODE_STATE(ksCurThread)->tcbBoundNotification) == NtfnState_Active)) {
-        reply_object_lock_release(reply_ptr);
+        reply_object_lock_release(reply_ptr, "fastpath");
         slowpathShared(SysReplyRecv);
     }
 
@@ -351,7 +351,7 @@ void NORETURN fastpath_reply_recv(word_t cptr, word_t msgInfo)
     /* Check that there's not a thread waiting to send */
     if (unlikely(endpoint_ptr_get_state(ep_ptr) == EPState_Send)) {
         ep_lock_release(ep_ptr);
-        reply_object_lock_release(reply_ptr);
+        reply_object_lock_release(reply_ptr, "fastpath");
         slowpathShared(SysReplyRecv);
     }
 
@@ -359,7 +359,7 @@ void NORETURN fastpath_reply_recv(word_t cptr, word_t msgInfo)
 #if defined(CONFIG_HARDWARE_DEBUG_API) && defined(CONFIG_ARCH_IA32)
     if (unlikely(caller->tcbArch.tcbContext.breakpointState.single_step_enabled)) {
         ep_lock_release(ep_ptr);
-        reply_object_lock_release(reply_ptr);
+        reply_object_lock_release(reply_ptr, "fastpath");
         slowpathShared(SysReplyRecv);
     }
 #endif
@@ -372,7 +372,7 @@ void NORETURN fastpath_reply_recv(word_t cptr, word_t msgInfo)
 #ifndef CONFIG_EXCEPTION_FASTPATH
     if (unlikely(fault_type != seL4_Fault_NullFault)) {
         ep_lock_release(ep_ptr);
-        reply_object_lock_release(reply_ptr);
+        reply_object_lock_release(reply_ptr, "fastpath");
         slowpathShared(SysReplyRecv);
     }
 #else
@@ -390,7 +390,7 @@ void NORETURN fastpath_reply_recv(word_t cptr, word_t msgInfo)
     /* Ensure that the destination has a valid MMU. */
     if (unlikely(! isValidVTableRoot_fp(newVTable))) {
         ep_lock_release(ep_ptr);
-        reply_object_lock_release(reply_ptr);
+        reply_object_lock_release(reply_ptr, "fastpath");
         slowpathShared(SysReplyRecv);
     }
 
@@ -413,14 +413,14 @@ void NORETURN fastpath_reply_recv(word_t cptr, word_t msgInfo)
     if (unlikely(asid_map_get_type(asid_map) != asid_map_asid_map_vspace ||
                  VSPACE_PTR(asid_map_asid_map_vspace_get_vspace_root(asid_map)) != cap_pd)) {
         ep_lock_release(ep_ptr);
-        reply_object_lock_release(reply_ptr);
+        reply_object_lock_release(reply_ptr, "fastpath");
         slowpathShared(SysReplyRecv);
     }
 #ifdef CONFIG_ARM_HYPERVISOR_SUPPORT
     /* Ensure the vmid is valid. */
     if (unlikely(!asid_map_asid_map_vspace_get_stored_vmid_valid(asid_map))) {
         ep_lock_release(ep_ptr);
-        reply_object_lock_release(reply_ptr);
+        reply_object_lock_release(reply_ptr, "fastpath");
         slowpathShared(SysReplyRecv);
     }
 
@@ -439,7 +439,7 @@ void NORETURN fastpath_reply_recv(word_t cptr, word_t msgInfo)
     dom = maxDom ? ksCurDomain : 0;
     if (unlikely(!isHighestPrio(dom, caller->tcbPriority))) {
         ep_lock_release(ep_ptr);
-        reply_object_lock_release(reply_ptr);
+        reply_object_lock_release(reply_ptr, "fastpath");
         slowpathShared(SysReplyRecv);
     }
 
@@ -447,7 +447,7 @@ void NORETURN fastpath_reply_recv(word_t cptr, word_t msgInfo)
     /* Ensure the HWASID is valid. */
     if (unlikely(!pde_pde_invalid_get_stored_asid_valid(stored_hw_asid))) {
         ep_lock_release(ep_ptr);
-        reply_object_lock_release(reply_ptr);
+        reply_object_lock_release(reply_ptr, "fastpath");
         slowpathShared(SysReplyRecv);
     }
 #endif
@@ -455,14 +455,14 @@ void NORETURN fastpath_reply_recv(word_t cptr, word_t msgInfo)
     /* Ensure the original caller is in the current domain and can be scheduled directly. */
     if (unlikely(caller->tcbDomain != ksCurDomain && 0 < maxDom)) {
         ep_lock_release(ep_ptr);
-        reply_object_lock_release(reply_ptr);
+        reply_object_lock_release(reply_ptr, "fastpath");
         slowpathShared(SysReplyRecv);
     }
 
 #ifdef CONFIG_KERNEL_MCS
     if (unlikely(caller->tcbSchedContext != NULL)) {
         ep_lock_release(ep_ptr);
-        reply_object_lock_release(reply_ptr);
+        reply_object_lock_release(reply_ptr, "fastpath");
         slowpathShared(SysReplyRecv);
     }
 #endif
@@ -471,7 +471,7 @@ void NORETURN fastpath_reply_recv(word_t cptr, word_t msgInfo)
     /* Ensure both threads have the same affinity */
     if (unlikely(NODE_STATE(ksCurThread)->tcbAffinity != caller->tcbAffinity)) {
         ep_lock_release(ep_ptr);
-        reply_object_lock_release(reply_ptr);
+        reply_object_lock_release(reply_ptr, "fastpath");
         slowpathShared(SysReplyRecv);
     }
 #endif /* ENABLE_SMP_SUPPORT */
@@ -581,7 +581,7 @@ void NORETURN fastpath_reply_recv(word_t cptr, word_t msgInfo)
 
         /* The badge/msginfo do not need to be not sent - this is not necessary for exceptions */
         ep_lock_release(ep_ptr);
-        reply_object_lock_release(reply_ptr);
+        reply_object_lock_release(reply_ptr, "fastpath");
         restore_user_context();
     } else {
 #endif
@@ -599,7 +599,7 @@ void NORETURN fastpath_reply_recv(word_t cptr, word_t msgInfo)
         msgInfo = wordFromMessageInfo(seL4_MessageInfo_set_capsUnwrapped(info, 0));
 
         ep_lock_release(ep_ptr);
-        reply_object_lock_release(reply_ptr);
+        reply_object_lock_release(reply_ptr, "fastpath");
         fastpath_restore(badge, msgInfo, NODE_STATE(ksCurThread));
 
 #ifdef CONFIG_EXCEPTION_FASTPATH
@@ -987,7 +987,7 @@ void NORETURN fastpath_vm_fault(vm_fault_type_t type)
     msgInfo = wordFromMessageInfo(seL4_MessageInfo_set_capsUnwrapped(info, 0));
 
     ep_lock_release(ep_ptr);
-    reply_object_lock_release(reply_ptr);
+    reply_object_lock_release(reply_ptr, "fastpath");
 
     NODE_UNLOCK_IF_HELD;
 

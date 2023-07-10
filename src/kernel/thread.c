@@ -130,10 +130,16 @@ void doReplyTransfer(tcb_t *sender, reply_t *reply, bool_t grant)
 void doReplyTransfer(tcb_t *sender, tcb_t *receiver, cte_t *slot, bool_t grant)
 #endif
 {
+#ifdef CONFIG_FINE_GRAINED_LOCKING
+    reply_object_lock_acquire(reply, "doReplyTransfer");
+#endif
 #ifdef CONFIG_KERNEL_MCS
     if (reply->replyTCB == NULL ||
         thread_state_get_tsType(reply->replyTCB->tcbState) != ThreadState_BlockedOnReply) {
         /* nothing to do */
+#ifdef CONFIG_FINE_GRAINED_LOCKING
+        reply_object_lock_release(reply, "doReplyTransfer early");
+#endif
         return;
     }
 
@@ -149,7 +155,7 @@ void doReplyTransfer(tcb_t *sender, tcb_t *receiver, cte_t *slot, bool_t grant)
 #else
     assert(thread_state_get_tsType(receiver->tcbState) ==
            ThreadState_BlockedOnReply);
-#endif
+#endif /* CONFIG_KERNEL_MCS */
 
     word_t fault_type = seL4_Fault_get_seL4_FaultType(receiver->tcbFault);
     if (likely(fault_type == seL4_Fault_NullFault)) {
@@ -181,7 +187,9 @@ void doReplyTransfer(tcb_t *sender, tcb_t *receiver, cte_t *slot, bool_t grant)
 
 #ifdef CONFIG_KERNEL_MCS
     if (receiver->tcbSchedContext && isRunnable(receiver)) {
+#ifdef CONFIG_FINE_GRAINED_LOCKING
         scheduler_lock_acquire(receiver->tcbAffinity);
+#endif
         if ((refill_ready(receiver->tcbSchedContext) && refill_sufficient(receiver->tcbSchedContext, 0))) {
             possibleSwitchTo(receiver);
         } else {
@@ -192,8 +200,14 @@ void doReplyTransfer(tcb_t *sender, tcb_t *receiver, cte_t *slot, bool_t grant)
                 postpone(receiver->tcbSchedContext);
             }
         }
+#ifdef CONFIG_FINE_GRAINED_LOCKING
         scheduler_lock_release(receiver->tcbAffinity);
+#endif
     }
+#endif
+
+#ifdef CONFIG_FINE_GRAINED_LOCKING
+    reply_object_lock_release(reply, "doReplyTransfer late");
 #endif
 }
 
@@ -286,7 +300,11 @@ static seL4_MessageInfo_t transferCaps(seL4_MessageInfo_t info,
                 break;
             }
 
-            cteInsertShared(dc_ret.cap, slot, destSlot);
+#ifdef CONFIG_FINE_GRAINED_LOCKING
+            cteInsert_atomic(dc_ret.cap, slot, destSlot);
+#else
+            cteInsert(dc_ret.cap, slot, destSlot);
+#endif
 
             destSlot = NULL;
         }
