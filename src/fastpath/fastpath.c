@@ -40,16 +40,20 @@ void NORETURN fastpath_call(word_t cptr, word_t msgInfo)
      * saved fault. */
     if (unlikely(fastpath_mi_check(msgInfo) ||
                  fault_type != seL4_Fault_NullFault)) {
-        slowpathExclusive(SysCall);
+        slowpathShared(SysCall);
     }
 
     /* Lookup the cap */
     ep_cap = lookup_fp(TCB_PTR_CTE_PTR(NODE_STATE(ksCurThread), tcbCTable)->cap, cptr);
 
     /* Check it's an endpoint */
-    if (unlikely(!cap_capType_equals(ep_cap, cap_endpoint_cap) ||
-                 !cap_endpoint_cap_get_capCanSend(ep_cap))) {
+    if (unlikely(!cap_capType_equals(ep_cap, cap_endpoint_cap))) {
         slowpathExclusive(SysCall);
+    }
+
+    /* Check that we are allowed to send to this cap */
+    if (unlikely(!cap_endpoint_cap_get_capCanSend(ep_cap))) {
+        slowpathShared(SysCall);
     }
 
     /* Get the endpoint address */
@@ -83,7 +87,7 @@ void NORETURN fastpath_call(word_t cptr, word_t msgInfo)
     /* Ensure that the destination has a valid VTable. */
     if (unlikely(! isValidVTableRoot_fp(newVTable))) {
         ep_lock_release(ep_ptr);
-        slowpathExclusive(SysCall);
+        slowpathShared(SysCall);
     }
 
 #ifdef CONFIG_ARCH_AARCH32
@@ -107,7 +111,7 @@ void NORETURN fastpath_call(word_t cptr, word_t msgInfo)
     if (unlikely(asid_map_get_type(asid_map) != asid_map_asid_map_vspace ||
                  VSPACE_PTR(asid_map_asid_map_vspace_get_vspace_root(asid_map)) != cap_pd)) {
         ep_lock_release(ep_ptr);
-        slowpathExclusive(SysCall);
+        slowpathShared(SysCall);
     }
 #ifdef CONFIG_ARM_HYPERVISOR_SUPPORT
     /* Ensure the vmid is valid. */
@@ -141,7 +145,7 @@ void NORETURN fastpath_call(word_t cptr, word_t msgInfo)
     if (unlikely(!cap_endpoint_cap_get_capCanGrant(ep_cap) &&
                  !cap_endpoint_cap_get_capCanGrantReply(ep_cap))) {
         ep_lock_release(ep_ptr);
-        slowpathExclusive(SysCall);
+        slowpathShared(SysCall);
     }
 
 #ifdef CONFIG_ARCH_AARCH32
@@ -294,7 +298,7 @@ void NORETURN fastpath_reply_recv(word_t cptr, word_t msgInfo)
 
     /* check it's a reply object */
     if (unlikely(!cap_capType_equals(reply_cap, cap_reply_cap))) {
-        slowpathShared(SysReplyRecv);
+        slowpathExclusive(SysReplyRecv);
     }
 #endif
 #ifdef CONFIG_KERNEL_MCS
