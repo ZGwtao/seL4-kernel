@@ -178,7 +178,7 @@ static inline bool_t FORCE_INLINE does_self_own_read_lock(void)
     return big_kernel_lock.node_read_state[getCurrentCPUIndex()].own_read_lock;
 }
 
-static inline void FORCE_INLINE clh_lock_read_acquire(void)
+static inline void FORCE_INLINE clh_lock_read_acquire(bool_t irqPath)
 {
     struct node_read_state *s = &big_kernel_lock.node_read_state[getCurrentCPUIndex()];
 
@@ -194,7 +194,7 @@ static inline void FORCE_INLINE clh_lock_read_acquire(void)
             /* we only handle irq_remote_call_ipi here as other type of IPIs
              * are async and could be delayed. 'handleIPI' may not return
              * based on value of the 'irqPath'. */
-            handleIPI(CORE_IRQ_TO_IRQT(getCurrentCPUIndex(), irq_remote_call_ipi), false);
+            handleIPI(CORE_IRQ_TO_IRQT(getCurrentCPUIndex(), irq_remote_call_ipi), irqPath);
             /* We do not need to perform a memory release here as we would have only modified
              * local state that we do not need to make visible */
         }
@@ -229,8 +229,8 @@ static inline bool_t FORCE_INLINE clh_is_self_in_queue(void)
     clh_lock_release(getCurrentCPUIndex());              \
 } while(0)
 
-#define NODE_READ_LOCK_ do {                             \
-    clh_lock_read_acquire();         \
+#define NODE_READ_LOCK_(irqPath) do {                             \
+    clh_lock_read_acquire(irqPath);         \
 } while (0)
 
 #define NODE_READ_UNLOCK_ do {                           \
@@ -264,7 +264,7 @@ static inline bool_t FORCE_INLINE clh_is_self_in_queue(void)
 #define NODE_UNLOCK do {} while (0)
 #define NODE_LOCK_IF(_cond, _irq) do {} while (0)
 #define NODE_UNLOCK_IF_HELD do {} while (0)
-#define NODE_READ_LOCK_ do {} while (0)
+#define NODE_READ_LOCK_(irqPath) do {} while (0)
 #define NODE_READ_UNLOCK_ do {} while (0)
 #define NODE_TAKE_WRITE_IF_READ_HELD_ do {} while (0)
 #endif /* ENABLE_SMP_SUPPORT */
@@ -273,7 +273,8 @@ static inline bool_t FORCE_INLINE clh_is_self_in_queue(void)
 #define NODE_LOCK_IRQ NODE_LOCK(true)
 #define NODE_LOCK_SYS_IF(_cond) NODE_LOCK_IF(_cond, false)
 #define NODE_LOCK_IRQ_IF(_cond) NODE_LOCK_IF(_cond, true)
-#define NODE_READ_LOCK NODE_READ_LOCK_
+#define NODE_READ_LOCK NODE_READ_LOCK_(false)
+#define NODE_READ_LOCK_IRQ NODE_READ_LOCK_(true)
 #define NODE_READ_UNLOCK NODE_READ_UNLOCK_
 #define NODE_TAKE_WRITE_IF_READ_HELD NODE_TAKE_WRITE_IF_READ_HELD_
 

@@ -43,6 +43,13 @@ exception_t handleInterruptEntry(void)
         updateTimestamp();
         checkBudget();
     }
+#ifdef CONFIG_FINE_GRAINED_LOCKING
+    else if (does_self_own_read_lock()) {
+        scheduler_lock_acquire(getCurrentCPUIndex());
+        updateTimestamp();
+        checkBudget();
+    }
+#endif
 #endif
 
     irq = getActiveIRQ();
@@ -62,6 +69,13 @@ exception_t handleInterruptEntry(void)
         activateThread();
 #ifdef CONFIG_KERNEL_MCS
     }
+#ifdef CONFIG_FINE_GRAINED_LOCKING
+    else if (does_self_own_read_lock()) {
+        schedule();
+        scheduler_lock_release(getCurrentCPUIndex());
+        activateThread();
+    }
+#endif
 #endif
 
     return EXCEPTION_NONE;

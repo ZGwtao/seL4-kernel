@@ -81,7 +81,7 @@ void ipiStallCoreCallback(bool_t irqPath)
         /* Start idle thread to capture the pending IPI */
         activateThread();
         restore_user_context();
-    } else if (is_self_waiting_on_read_lock()) {
+    } else if (is_self_waiting_on_read_lock() && !irqPath) {
         if (thread_state_ptr_get_tsType(&NODE_STATE(ksCurThread)->tcbState) == ThreadState_Running) {
             setThreadState(NODE_STATE(ksCurThread), ThreadState_Restart);
         }

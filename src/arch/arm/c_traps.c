@@ -103,7 +103,16 @@ void VISIBLE NORETURN c_handle_instruction_fault(void)
 
 void VISIBLE NORETURN c_handle_interrupt(void)
 {
-    NODE_LOCK_IRQ_IF(IRQT_TO_IRQ(getActiveIRQ()) != irq_remote_call_ipi);
+    word_t irq = IRQT_TO_IRQ(getActiveIRQ());
+#ifdef CONFIG_FINE_GRAINED_LOCKING
+    if (irq == irq_reschedule_ipi) {
+        NODE_READ_LOCK_IRQ;
+    }
+    else
+#endif
+    if (irq != irq_remote_call_ipi) {
+        NODE_LOCK_IRQ;
+    }
     c_entry_hook();
 
 #ifdef TRACK_KERNEL_ENTRIES
