@@ -311,7 +311,7 @@ static exception_t handleInvocation(bool_t isCall, bool_t isBlocking)
         case cap_reply_cap:
             break;
         default:
-            retry_syscall_exclusive();
+            slowpath_exclusive(NODE_STATE(ksSyscallNumber));
         }
     }
 
@@ -675,13 +675,3 @@ exception_t handleSyscall(syscall_t syscall)
 
     return EXCEPTION_NONE;
 }
-
-#ifdef CONFIG_FINE_GRAINED_LOCKING
-void retry_syscall_exclusive(void)
-{
-    NODE_TAKE_WRITE_IF_READ_HELD;
-    handleSyscall(NODE_STATE(ksSyscallNumber));
-    restore_user_context();
-    UNREACHABLE();
-}
-#endif

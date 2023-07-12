@@ -125,9 +125,8 @@ void VISIBLE NORETURN c_handle_interrupt(void)
     restore_user_context();
 }
 
-void NORETURN slowpathExclusive(syscall_t syscall)
+void NORETURN slowpath(syscall_t syscall)
 {
-    NODE_TAKE_WRITE_IF_READ_HELD;
     if (unlikely(syscall < SYSCALL_MIN || syscall > SYSCALL_MAX)) {
 #ifdef TRACK_KERNEL_ENTRIES
         ksKernelEntry.path = Entry_UnknownSyscall;
@@ -136,6 +135,7 @@ void NORETURN slowpathExclusive(syscall_t syscall)
         /* Contrary to the name, this handles all non-standard syscalls used in
          * debug builds also.
          */
+        NODE_TAKE_WRITE_IF_READ_HELD;
         handleUnknownSyscall(syscall);
     } else {
 #ifdef TRACK_KERNEL_ENTRIES
@@ -148,72 +148,26 @@ void NORETURN slowpathExclusive(syscall_t syscall)
     UNREACHABLE();
 }
 
-void NORETURN slowpathShared(syscall_t syscall)
+void NORETURN slowpath_exclusive(syscall_t syscall)
 {
-    if (unlikely(syscall < SYSCALL_MIN || syscall > SYSCALL_MAX)) {
-        slowpathExclusive(syscall);
-    } else {
-        handleSyscall(syscall);
-    }
-
-    restore_user_context();
-    UNREACHABLE();
+    NODE_TAKE_WRITE_IF_READ_HELD;
+    slowpath(syscall);
 }
-
-#ifdef CONFIG_KERNEL_MCS
-bool_t lock_shared_heuristic(word_t cptr, word_t msgInfo, syscall_t syscall)
-{
-    bool_t compatible_syscall = false;
-
-    if (syscall == SysCall) compatible_syscall = true;
-    if (syscall == SysSend) compatible_syscall = true;
-    if (syscall == SysNBSend) compatible_syscall = true;
-
-    if (syscall == SysNBWait) compatible_syscall = true;
-    if (syscall == SysWait) compatible_syscall = true;
-    if (syscall == SysRecv) compatible_syscall = true;
-    if (syscall == SysNBRecv) compatible_syscall = true;
-    if (syscall == SysReplyRecv) compatible_syscall = true;
-
-    if (syscall == SysNBSendRecv) compatible_syscall = true;
-    if (syscall == SysNBSendWait) compatible_syscall = true;
-
-    if (syscall == SysYield) compatible_syscall = true;
-
-    return compatible_syscall;
-}
-#endif
 
 void VISIBLE c_handle_syscall(word_t cptr, word_t msgInfo, syscall_t syscall)
 {
     NODE_STATE(ksSyscallNumber) = syscall;
 
-    bool_t shared = lock_shared_heuristic(cptr, msgInfo, syscall);
+    NODE_READ_LOCK;
 
-#ifdef CONFIG_KERNEL_MCS
-    if (!shared) {
-#endif
-        NODE_LOCK_SYS;
-#ifdef CONFIG_KERNEL_MCS
-    } else {
-        NODE_READ_LOCK;
-    }
-#endif
     c_entry_hook();
 #ifdef TRACK_KERNEL_ENTRIES
     benchmark_debug_syscall_start(cptr, msgInfo, syscall);
     ksKernelEntry.is_fastpath = 0;
 #endif /* DEBUG */
 
-#ifdef CONFIG_KERNEL_MCS
-    if (!shared) {
-#endif
-        slowpathExclusive(syscall);
-#ifdef CONFIG_KERNEL_MCS
-    } else {
-        slowpathShared(syscall);
-    }
-#endif
+    slowpath(syscall);
+
     UNREACHABLE();
 }
 
