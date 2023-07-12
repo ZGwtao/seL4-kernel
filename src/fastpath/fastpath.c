@@ -627,7 +627,7 @@ void NORETURN fastpath_signal(word_t cptr, word_t msgInfo)
     /* Check there's no saved fault. Can be removed if the current thread can't
      * have a fault while invoking the fastpath */
     if (unlikely(fault_type != seL4_Fault_NullFault)) {
-        slowpathExclusive(SysSend);
+        slowpathShared(SysSend);
     }
 
     /* Lookup the cap */
@@ -640,12 +640,12 @@ void NORETURN fastpath_signal(word_t cptr, word_t msgInfo)
 
     /* Check that we are allowed to send to this cap */
     if (unlikely(!cap_notification_cap_get_capNtfnCanSend(cap))) {
-        slowpathExclusive(SysSend);
+        slowpathShared(SysSend);
     }
 
     /* Check that the current domain hasn't expired */
     if (unlikely(isCurDomainExpired())) {
-        slowpathExclusive(SysSend);
+        slowpathShared(SysSend);
     }
 
     /* Potential blocking endpoint of bound TCB */
@@ -718,7 +718,7 @@ void NORETURN fastpath_signal(word_t cptr, word_t msgInfo)
         if (sc == NULL || sc->scTcb != NULL) {
             if (ep_ptr) ep_lock_release(ep_ptr);
             ntfn_lock_release(ntfnPtr);
-            slowpathExclusive(SysSend);
+            slowpathShared(SysSend);
         }
 
         /* Slowpath the case where dest has its FPU context in the FPU of a core*/
@@ -726,7 +726,7 @@ void NORETURN fastpath_signal(word_t cptr, word_t msgInfo)
         if (nativeThreadUsingFPU(dest)) {
             if (ep_ptr) ep_lock_release(ep_ptr);
             ntfn_lock_release(ntfnPtr);
-            slowpathExclusive(SysSend);
+            slowpathShared(SysSend);
         }
 #endif
     }
@@ -736,7 +736,7 @@ void NORETURN fastpath_signal(word_t cptr, word_t msgInfo)
     if (NODE_STATE_ON_CORE(ksCurThread, sc->scCore)->tcbPriority < dest->tcbPriority) {
         if (ep_ptr) ep_lock_release(ep_ptr);
         ntfn_lock_release(ntfnPtr);
-        slowpathExclusive(SysSend);
+        slowpathShared(SysSend);
     }
 
     /* Simplified schedContext_resume that does not change state and reverts to the
@@ -748,7 +748,7 @@ void NORETURN fastpath_signal(word_t cptr, word_t msgInfo)
         if (!(refill_ready(sc) && refill_sufficient(sc, 0))) {
             if (ep_ptr) ep_lock_release(ep_ptr);
             ntfn_lock_release(ntfnPtr);
-            slowpathExclusive(SysSend);
+            slowpathShared(SysSend);
         }
         schedulable = true;
     }
