@@ -16,7 +16,17 @@
 
 #define TIME_ARG_SIZE (sizeof(ticks_t) / sizeof(word_t))
 
-#ifdef CONFIG_KERNEL_MCS
+#ifdef CONFIG_FINE_GRAINED_LOCKING
+#define MCS_DO_IF_BUDGET(_block) do { \
+    scheduler_lock_acquire(getCurrentCPUIndex()); \
+    updateTimestamp(); \
+    bool_t budget_sufficient = checkBudgetRestart(); \
+    scheduler_lock_release(getCurrentCPUIndex()); \
+    if (likely(budget_sufficient)) { \
+        _block \
+    } \
+} while (0);
+#elif defined(CONFIG_KERNEL_MCS)
 #define MCS_DO_IF_BUDGET(_block) \
     updateTimestamp(); \
     if (likely(checkBudgetRestart())) { \
@@ -30,8 +40,7 @@
 #endif
 
 exception_t handleSyscall(syscall_t syscall);
-#ifdef CONFIG_KERNEL_MCS
-exception_t handleSyscallShared(syscall_t syscall);
+#ifdef CONFIG_FINE_GRAINED_LOCKING
 void retry_syscall_exclusive(void);
 #endif
 exception_t handleInterruptEntry(void);

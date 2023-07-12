@@ -536,142 +536,6 @@ static void handleYield(void)
 #endif
 }
 
-#ifdef CONFIG_KERNEL_MCS
-exception_t handleSyscallShared(syscall_t syscall)
-{
-    exception_t ret;
-    irq_t irq;
-    scheduler_lock_acquire(getCurrentCPUIndex());
-    updateTimestamp();
-    bool_t budget_sufficient = checkBudgetRestart();
-    scheduler_lock_release(getCurrentCPUIndex());
-    if (budget_sufficient) {
-        switch (syscall)
-        {
-        case SysSend: {
-            ret = handleInvocation(false, true, false, false, getRegister(NODE_STATE(ksCurThread), capRegister));
-            assert(ret == EXCEPTION_NONE);
-            if (unlikely(ret != EXCEPTION_NONE)) {
-                mcsPreemptionPoint();
-                irq = getActiveIRQ();
-                if (IRQT_TO_IRQ(irq) != IRQT_TO_IRQ(irqInvalid)) {
-                    handleInterrupt(irq);
-                }
-            }
-            break;
-        }
-        case SysNBSend: {
-            ret = handleInvocation(false, false, false, false, getRegister(NODE_STATE(ksCurThread), capRegister));
-            assert(ret == EXCEPTION_NONE);
-            if (unlikely(ret != EXCEPTION_NONE)) {
-                mcsPreemptionPoint();
-                irq = getActiveIRQ();
-                if (IRQT_TO_IRQ(irq) != IRQT_TO_IRQ(irqInvalid)) {
-                    handleInterrupt(irq);
-                }
-            }
-            break;
-        }
-        case SysCall: {
-            ret = handleInvocation(true, true, true, false, getRegister(NODE_STATE(ksCurThread), capRegister));
-            assert(ret == EXCEPTION_NONE);
-            if (unlikely(ret != EXCEPTION_NONE)) {
-                mcsPreemptionPoint();
-                irq = getActiveIRQ();
-                if (IRQT_TO_IRQ(irq) != IRQT_TO_IRQ(irqInvalid)) {
-                    handleInterrupt(irq);
-                }
-            }
-            break;
-        }
-        case SysRecv: {
-            handleRecv(true, true);
-            break;
-        }
-        case SysWait: {
-            handleRecv(true, false);
-            break;
-        }
-        case SysNBWait: {
-            handleRecv(false, false);
-            break;
-        }
-        case SysReplyRecv: {
-            cptr_t reply = getRegister(NODE_STATE(ksCurThread), replyRegister);
-            ret = handleInvocation(false, false, true, true, reply);
-            /* reply cannot error and is not preemptible */
-            assert(ret == EXCEPTION_NONE);
-            handleRecv(true, true);
-            break;
-        }
-        case SysNBSendRecv: {
-            cptr_t dest = getNBSendRecvDest();
-            ret = handleInvocation(false, false, true, true, dest);
-            assert(ret == EXCEPTION_NONE);
-            if (unlikely(ret != EXCEPTION_NONE)) {
-                mcsPreemptionPoint();
-                irq = getActiveIRQ();
-                if (IRQT_TO_IRQ(irq) != IRQT_TO_IRQ(irqInvalid)) {
-                    handleInterrupt(irq);
-                }
-                break;
-            }
-            handleRecv(true, true);
-            break;
-        }
-        case SysNBSendWait: {
-            ret = handleInvocation(false, false, true, true, getRegister(NODE_STATE(ksCurThread), replyRegister));
-            assert(ret == EXCEPTION_NONE);
-            if (unlikely(ret != EXCEPTION_NONE)) {
-                mcsPreemptionPoint();
-                irq = getActiveIRQ();
-                if (IRQT_TO_IRQ(irq) != IRQT_TO_IRQ(irqInvalid)) {
-                    handleInterrupt(irq);
-                }
-                break;
-            }
-            handleRecv(true, false);
-            break;
-        }
-        case SysNBRecv: {
-            handleRecv(false, true);
-            break;
-        }
-        case SysYield: {
-            handleYield();
-            break;
-        }
-        default: {
-            fail("Invalid syscall");
-        }
-        }
-    }
-
-    word_t cpu = getCurrentCPUIndex();
-    word_t cur_thread_cpu = NODE_STATE(ksCurThread)->tcbAffinity;
-    if (cpu < cur_thread_cpu) {
-        scheduler_lock_acquire(cpu);
-        scheduler_lock_acquire(cur_thread_cpu);
-        schedule();
-        scheduler_lock_release(cur_thread_cpu);
-        scheduler_lock_release(cpu);
-    } else if (cpu > cur_thread_cpu) {
-        scheduler_lock_acquire(cur_thread_cpu);
-        scheduler_lock_acquire(cpu);
-        schedule();
-        scheduler_lock_release(cpu);
-        scheduler_lock_release(cur_thread_cpu);
-    } else {
-        scheduler_lock_acquire(cpu);
-        schedule();
-        scheduler_lock_release(cpu);
-    }
-
-    activateThread();
-    return EXCEPTION_NONE;
-}
-#endif
-
 exception_t handleSyscall(syscall_t syscall)
 {
     exception_t ret;
@@ -784,13 +648,35 @@ exception_t handleSyscall(syscall_t syscall)
 
     })
 
-    schedule();
+#ifdef CONFIG_FINE_GRAINED_LOCKING
+    word_t cpu = getCurrentCPUIndex();
+    word_t cur_thread_cpu = NODE_STATE(ksCurThread)->tcbAffinity;
+    if (cpu < cur_thread_cpu) {
+        scheduler_lock_acquire(cpu);
+        scheduler_lock_acquire(cur_thread_cpu);
+        schedule();
+        scheduler_lock_release(cur_thread_cpu);
+        scheduler_lock_release(cpu);
+    } else if (cpu > cur_thread_cpu) {
+        scheduler_lock_acquire(cur_thread_cpu);
+        scheduler_lock_acquire(cpu);
+        schedule();
+        scheduler_lock_release(cpu);
+        scheduler_lock_release(cur_thread_cpu);
+    } else {
+        scheduler_lock_acquire(cpu);
+#endif
+        schedule();
+#ifdef CONFIG_FINE_GRAINED_LOCKING
+        scheduler_lock_release(cpu);
+    }
+#endif
     activateThread();
 
     return EXCEPTION_NONE;
 }
 
-#ifdef CONFIG_KERNEL_MCS
+#ifdef CONFIG_FINE_GRAINED_LOCKING
 void retry_syscall_exclusive(void)
 {
     NODE_TAKE_WRITE_IF_READ_HELD;

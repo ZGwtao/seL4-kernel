@@ -153,7 +153,7 @@ void NORETURN slowpathShared(syscall_t syscall)
     if (unlikely(syscall < SYSCALL_MIN || syscall > SYSCALL_MAX)) {
         slowpathExclusive(syscall);
     } else {
-        handleSyscallShared(syscall);
+        handleSyscall(syscall);
     }
 
     restore_user_context();
