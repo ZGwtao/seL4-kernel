@@ -200,7 +200,7 @@ block sched_control_cap {
 
 ---- Arch-independent object types
 
--- Endpoint: size = 16 bytes
+-- Endpoint: size = 16 bytes (32 bytes on mcs)
 block endpoint {
     field epQueue_head 64
 
@@ -214,6 +214,10 @@ block endpoint {
 #error "Unspecified canonical address range"
 #endif
     field state 2
+#ifdef CONFIG_KERNEL_MCS
+    padding 64
+    field core 64
+#endif
 }
 
 -- Async endpoint: size = 32 bytes (64 bytes on mcs)

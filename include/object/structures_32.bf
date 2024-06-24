@@ -144,7 +144,7 @@ block sched_control_cap {
 #endif
 ---- Arch-independent object types
 
--- Endpoint: size = 16 bytes
+-- Endpoint: size = 16 bytes (32 bytes on mcs)
 block endpoint {
     padding 64
 
@@ -154,6 +154,10 @@ block endpoint {
     field_high epQueue_tail 28
     padding 2
     field state 2
+#ifdef CONFIG_KERNEL_MCS
+    padding 96
+    field core 32
+#endif
 }
 
 -- Notification object: size = 16 bytes (32 bytes on mcs)
