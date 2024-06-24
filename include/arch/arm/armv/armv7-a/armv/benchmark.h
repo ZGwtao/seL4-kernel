@@ -15,6 +15,7 @@
 #define CCNT "p15, 0, %0, c9, c13, 0"
 #define PMINTENSET "p15, 0, %0, c9, c14, 1"
 #define CCNT_INDEX 31
+#define PMSELR "p15, 0, %0, c9, c12, 5"
 
 static inline void armv_enableOverflowIRQ(void)
 {
