@@ -190,38 +190,38 @@ exception_t decodeX86IOPTInvocation(
 
     if (invLabel != X86IOPageTableMap) {
         userError("X86IOPageTable: Illegal operation.");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
-    if (current_extra_caps.excaprefs[0] == NULL || length < 1) {
+    if (NODE_STATE(ksCurrentExtraCaps).excaprefs[0] == NULL || length < 1) {
         userError("X86IOPageTableMap: Truncated message.");
-        current_syscall_error.type = seL4_TruncatedMessage;
+        NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
-    io_space     = current_extra_caps.excaprefs[0]->cap;
+    io_space     = NODE_STATE(ksCurrentExtraCaps).excaprefs[0]->cap;
     io_address   = getSyscallArg(0, buffer) & ~MASK(VTD_PT_INDEX_BITS + seL4_PageBits);
 
     if (cap_io_page_table_cap_get_capIOPTIsMapped(cap)) {
         userError("X86IOPageTableMap: IO page table is already mapped.");
-        current_syscall_error.type = seL4_InvalidCapability;
-        current_syscall_error.invalidCapNumber = 0;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 0;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (cap_get_capType(io_space) != cap_io_space_cap) {
         userError("X86IOPageTableMap: Invalid IO space capability.");
-        current_syscall_error.type = seL4_InvalidCapability;
-        current_syscall_error.invalidCapNumber = 0;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 0;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     pci_request_id = cap_io_space_cap_get_capPCIDevice(io_space);
     domain_id = cap_io_space_cap_get_capDomainID(io_space);
     if (pci_request_id == asidInvalid) {
-        current_syscall_error.type = seL4_InvalidCapability;
-        current_syscall_error.invalidCapNumber = 0;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 0;
 
         return EXCEPTION_SYSCALL_ERROR;
     }
@@ -255,14 +255,14 @@ exception_t decodeX86IOPTInvocation(
         lu_ret  = lookupIOPTSlot(vtd_pte, io_address);
 
         if (lu_ret.status != EXCEPTION_NONE) {
-            current_syscall_error.type = seL4_FailedLookup;
-            current_syscall_error.failedLookupWasSource = false;
+            NODE_STATE(ksCurSyscallError).type = seL4_FailedLookup;
+            NODE_STATE(ksCurSyscallError).failedLookupWasSource = false;
             return EXCEPTION_SYSCALL_ERROR;
         }
 
         lu_ret.level = x86KSnumIOPTLevels - lu_ret.level;
         if (vtd_pte_ptr_get_addr(lu_ret.ioptSlot) != 0) {
-            current_syscall_error.type = seL4_DeleteFirst;
+            NODE_STATE(ksCurSyscallError).type = seL4_DeleteFirst;
 
             return EXCEPTION_SYSCALL_ERROR;
         }
@@ -311,34 +311,34 @@ exception_t decodeX86IOMapInvocation(
     vm_rights_t frame_cap_rights;
     seL4_CapRights_t dma_cap_rights_mask;
 
-    if (current_extra_caps.excaprefs[0] == NULL || length < 2) {
+    if (NODE_STATE(ksCurrentExtraCaps).excaprefs[0] == NULL || length < 2) {
         userError("X86PageMapIO: Truncated message.");
-        current_syscall_error.type = seL4_TruncatedMessage;
+        NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (cap_frame_cap_get_capFSize(cap) != X86_SmallPage) {
         userError("X86PageMapIO: Invalid page size.");
-        current_syscall_error.type = seL4_InvalidCapability;
-        current_syscall_error.invalidCapNumber = 0;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 0;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (cap_frame_cap_get_capFMappedASID(cap) != asidInvalid) {
         userError("X86PageMapIO: Page already mapped.");
-        current_syscall_error.type = seL4_InvalidCapability;
-        current_syscall_error.invalidCapNumber = 0;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 0;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
-    io_space    = current_extra_caps.excaprefs[0]->cap;
+    io_space    = NODE_STATE(ksCurrentExtraCaps).excaprefs[0]->cap;
     io_address  = getSyscallArg(1, buffer) & ~MASK(PAGE_BITS);
     paddr       = pptr_to_paddr((void *)cap_frame_cap_get_capFBasePtr(cap));
 
     if (cap_get_capType(io_space) != cap_io_space_cap) {
         userError("X86PageMapIO: Invalid IO space capability.");
-        current_syscall_error.type = seL4_InvalidCapability;
-        current_syscall_error.invalidCapNumber = 0;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 0;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -346,8 +346,8 @@ exception_t decodeX86IOMapInvocation(
 
     if (pci_request_id == asidInvalid) {
         userError("X86PageMapIO: Invalid PCI device.");
-        current_syscall_error.type = seL4_InvalidCapability;
-        current_syscall_error.invalidCapNumber = 0;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 0;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -355,21 +355,21 @@ exception_t decodeX86IOMapInvocation(
 
     if (!vtd_cte_ptr_get_present(vtd_context_slot)) {
         /* 1st Level Page Table is not installed */
-        current_syscall_error.type = seL4_FailedLookup;
-        current_syscall_error.failedLookupWasSource = false;
+        NODE_STATE(ksCurSyscallError).type = seL4_FailedLookup;
+        NODE_STATE(ksCurSyscallError).failedLookupWasSource = false;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     vtd_pte = (vtd_pte_t *)paddr_to_pptr(vtd_cte_ptr_get_asr(vtd_context_slot));
     lu_ret  = lookupIOPTSlot(vtd_pte, io_address);
     if (lu_ret.status != EXCEPTION_NONE || lu_ret.level != 0) {
-        current_syscall_error.type = seL4_FailedLookup;
-        current_syscall_error.failedLookupWasSource = false;
+        NODE_STATE(ksCurSyscallError).type = seL4_FailedLookup;
+        NODE_STATE(ksCurSyscallError).failedLookupWasSource = false;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (vtd_pte_ptr_get_addr(lu_ret.ioptSlot) != 0) {
-        current_syscall_error.type = seL4_DeleteFirst;
+        NODE_STATE(ksCurSyscallError).type = seL4_DeleteFirst;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -381,8 +381,8 @@ exception_t decodeX86IOMapInvocation(
     if (write || read) {
         iopte = vtd_pte_new(paddr, !!write, !!read);
     } else {
-        current_syscall_error.type = seL4_InvalidArgument;
-        current_syscall_error.invalidArgumentNumber = 0;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidArgument;
+        NODE_STATE(ksCurSyscallError).invalidArgumentNumber = 0;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -500,7 +500,7 @@ exception_t performX86IOUnMapInvocation(cap_t cap, cte_t *ctSlot)
 exception_t decodeX86IOSpaceInvocation(word_t invLabel, cap_t cap)
 {
     userError("IOSpace capability has no invocations");
-    current_syscall_error.type = seL4_IllegalOperation;
+    NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
     return EXCEPTION_SYSCALL_ERROR;
 }
 

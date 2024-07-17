@@ -41,12 +41,12 @@ exception_t Arch_checkIRQ(word_t irq_w)
     }
     if (config_set(CONFIG_IRQ_IOAPIC)) {
         userError("IRQControl: Illegal operation");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
     } else {
         userError("IRQControl: IRQ %ld should be in range %ld - %ld", irq_w, (long)irq_isa_min, (long)irq_isa_max);
-        current_syscall_error.type = seL4_RangeError;
-        current_syscall_error.rangeErrorMin = irq_isa_min;
-        current_syscall_error.rangeErrorMax = irq_isa_max;
+        NODE_STATE(ksCurSyscallError).type = seL4_RangeError;
+        NODE_STATE(ksCurSyscallError).rangeErrorMin = irq_isa_min;
+        NODE_STATE(ksCurSyscallError).rangeErrorMax = irq_isa_max;
     }
     return EXCEPTION_SYSCALL_ERROR;
 }
@@ -78,40 +78,40 @@ exception_t Arch_decodeIRQControlInvocation(word_t invLabel, word_t length, cte_
 
     if (!config_set(CONFIG_IRQ_IOAPIC)) {
         userError("IRQControl: Illegal operation.");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     /* ensure we have a valid invocation before continuing any decoding */
     if (invLabel != X86IRQIssueIRQHandlerIOAPIC && invLabel != X86IRQIssueIRQHandlerMSI) {
         userError("IRQControl: Illegal operation");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     /* check the common parameters */
 
-    if (length < 7 || current_extra_caps.excaprefs[0] == NULL) {
+    if (length < 7 || NODE_STATE(ksCurrentExtraCaps).excaprefs[0] == NULL) {
         userError("IRQControl: Truncated message");
-        current_syscall_error.type = seL4_TruncatedMessage;
+        NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
     }
     index = getSyscallArg(0, buffer);
     depth = getSyscallArg(1, buffer);
-    cnodeCap = current_extra_caps.excaprefs[0]->cap;
+    cnodeCap = NODE_STATE(ksCurrentExtraCaps).excaprefs[0]->cap;
     irq = getSyscallArg(6, buffer);
     if (irq > irq_user_max - irq_user_min) {
         userError("IRQControl: Invalid irq %ld should be between 0-%ld", (long)irq, (long)(irq_user_max - irq_user_min));
-        current_syscall_error.type = seL4_RangeError;
-        current_syscall_error.rangeErrorMin = 0;
-        current_syscall_error.rangeErrorMax = irq_user_max - irq_user_min;
+        NODE_STATE(ksCurSyscallError).type = seL4_RangeError;
+        NODE_STATE(ksCurSyscallError).rangeErrorMin = 0;
+        NODE_STATE(ksCurSyscallError).rangeErrorMax = irq_user_max - irq_user_min;
         return EXCEPTION_SYSCALL_ERROR;
     }
     irq += irq_user_min;
 
     if (isIRQActive(irq)) {
         userError("IRQControl: IRQ %d is already active.", (int)irq);
-        current_syscall_error.type = seL4_RevokeFirst;
+        NODE_STATE(ksCurSyscallError).type = seL4_RevokeFirst;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -155,23 +155,23 @@ exception_t Arch_decodeIRQControlInvocation(word_t invLabel, word_t length, cte_
          * vector and trust the user */
 
         if (pci_bus > PCI_BUS_MAX) {
-            current_syscall_error.type = seL4_RangeError;
-            current_syscall_error.rangeErrorMin = 0;
-            current_syscall_error.rangeErrorMax = PCI_BUS_MAX;
+            NODE_STATE(ksCurSyscallError).type = seL4_RangeError;
+            NODE_STATE(ksCurSyscallError).rangeErrorMin = 0;
+            NODE_STATE(ksCurSyscallError).rangeErrorMax = PCI_BUS_MAX;
             return EXCEPTION_SYSCALL_ERROR;
         }
 
         if (pci_dev > PCI_DEV_MAX) {
-            current_syscall_error.type = seL4_RangeError;
-            current_syscall_error.rangeErrorMin = 0;
-            current_syscall_error.rangeErrorMax = PCI_DEV_MAX;
+            NODE_STATE(ksCurSyscallError).type = seL4_RangeError;
+            NODE_STATE(ksCurSyscallError).rangeErrorMin = 0;
+            NODE_STATE(ksCurSyscallError).rangeErrorMax = PCI_DEV_MAX;
             return EXCEPTION_SYSCALL_ERROR;
         }
 
         if (pci_func > PCI_FUNC_MAX) {
-            current_syscall_error.type = seL4_RangeError;
-            current_syscall_error.rangeErrorMin = 0;
-            current_syscall_error.rangeErrorMax = PCI_FUNC_MAX;
+            NODE_STATE(ksCurSyscallError).type = seL4_RangeError;
+            NODE_STATE(ksCurSyscallError).rangeErrorMin = 0;
+            NODE_STATE(ksCurSyscallError).rangeErrorMax = PCI_FUNC_MAX;
             return EXCEPTION_SYSCALL_ERROR;
         }
 

@@ -31,7 +31,7 @@ deriveCap_ret_t Arch_deriveCap(cte_t *slot, cap_t cap)
             ret.status = EXCEPTION_NONE;
         } else {
             userError("Deriving an unmapped PT cap");
-            current_syscall_error.type = seL4_IllegalOperation;
+            NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
             ret.cap = cap_null_cap_new();
             ret.status = EXCEPTION_SYSCALL_ERROR;
         }
@@ -43,7 +43,7 @@ deriveCap_ret_t Arch_deriveCap(cte_t *slot, cap_t cap)
             ret.status = EXCEPTION_NONE;
         } else {
             userError("Deriving a PD cap without an assigned ASID");
-            current_syscall_error.type = seL4_IllegalOperation;
+            NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
             ret.cap = cap_null_cap_new();
             ret.status = EXCEPTION_SYSCALL_ERROR;
         }
@@ -73,7 +73,7 @@ deriveCap_ret_t Arch_deriveCap(cte_t *slot, cap_t cap)
             ret.cap = cap;
             ret.status = EXCEPTION_NONE;
         } else {
-            current_syscall_error.type = seL4_IllegalOperation;
+            NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
             ret.cap = cap_null_cap_new();
             ret.status = EXCEPTION_SYSCALL_ERROR;
         }
@@ -91,7 +91,7 @@ deriveCap_ret_t Arch_deriveCap(cte_t *slot, cap_t cap)
             ret.status = EXCEPTION_NONE;
         } else {
             userError("Deriving a EPT PML4 cap without an assigned ASID.");
-            current_syscall_error.type = seL4_IllegalOperation;
+            NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
             ret.cap = cap_null_cap_new();
             ret.status = EXCEPTION_SYSCALL_ERROR;
         }
@@ -102,7 +102,7 @@ deriveCap_ret_t Arch_deriveCap(cte_t *slot, cap_t cap)
             ret.status = EXCEPTION_NONE;
         } else {
             userError("Deriving an unmapped EPT PDPT cap.");
-            current_syscall_error.type = seL4_IllegalOperation;
+            NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
             ret.cap = cap_null_cap_new();
             ret.status = EXCEPTION_SYSCALL_ERROR;
         }
@@ -114,7 +114,7 @@ deriveCap_ret_t Arch_deriveCap(cte_t *slot, cap_t cap)
             ret.status = EXCEPTION_NONE;
         } else {
             userError("Deriving an unmapped EPT PD cap.");
-            current_syscall_error.type = seL4_IllegalOperation;
+            NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
             ret.cap = cap_null_cap_new();
             ret.status = EXCEPTION_SYSCALL_ERROR;
         }
@@ -126,7 +126,7 @@ deriveCap_ret_t Arch_deriveCap(cte_t *slot, cap_t cap)
             ret.status = EXCEPTION_NONE;
         } else {
             userError("Deriving an unmapped EPT PT cap.");
-            current_syscall_error.type = seL4_IllegalOperation;
+            NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
             ret.cap = cap_null_cap_new();
             ret.status = EXCEPTION_SYSCALL_ERROR;
         }

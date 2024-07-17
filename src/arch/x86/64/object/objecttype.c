@@ -45,7 +45,7 @@ deriveCap_ret_t Mode_deriveCap(cte_t *slot, cap_t cap)
             ret.status = EXCEPTION_NONE;
         } else {
             userError("Deriving a PML4 cap without an assigned ASID");
-            current_syscall_error.type = seL4_IllegalOperation;
+            NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
             ret.cap = cap_null_cap_new();
             ret.status = EXCEPTION_SYSCALL_ERROR;
         }
@@ -57,7 +57,7 @@ deriveCap_ret_t Mode_deriveCap(cte_t *slot, cap_t cap)
             ret.status = EXCEPTION_NONE;
         } else {
             userError("Deriving an unmapped PTPD cap");
-            current_syscall_error.type = seL4_IllegalOperation;
+            NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
             ret.cap = cap_null_cap_new();
             ret.status = EXCEPTION_SYSCALL_ERROR;
         }
@@ -333,8 +333,8 @@ exception_t Mode_decodeInvocation(
         return decodeX86MMUInvocation(label, length, cptr, slot, cap, call, buffer);
 
     default:
-        current_syscall_error.type = seL4_InvalidCapability;
-        current_syscall_error.invalidCapNumber = 0;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 0;
         return EXCEPTION_SYSCALL_ERROR;
     }
 }

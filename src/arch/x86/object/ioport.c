@@ -42,7 +42,7 @@ static exception_t ensurePortOperationAllowed(cap_t cap, uint32_t start_port, ui
         userError("IOPort: Ports %d--%d fall outside permitted range %d--%d.",
                   (int)start_port, (int)end_port,
                   (int)first_allowed, (int)last_allowed);
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -119,13 +119,13 @@ exception_t decodeX86PortControlInvocation(
 
     if (invLabel != X86IOPortControlIssue) {
         userError("IOPortControl: Unknown operation.");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
-    if (length < 4 || current_extra_caps.excaprefs[0] == NULL) {
+    if (length < 4 || NODE_STATE(ksCurrentExtraCaps).excaprefs[0] == NULL) {
         userError("IOPortControl: Truncated message.");
-        current_syscall_error.type = seL4_TruncatedMessage;
+        NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -134,18 +134,18 @@ exception_t decodeX86PortControlInvocation(
     index = getSyscallArg(2, buffer);
     depth = getSyscallArg(3, buffer);
 
-    cnodeCap = current_extra_caps.excaprefs[0]->cap;
+    cnodeCap = NODE_STATE(ksCurrentExtraCaps).excaprefs[0]->cap;
 
     if (last_port < first_port) {
         userError("IOPortControl: Last port must be > first port.");
-        current_syscall_error.type = seL4_InvalidArgument;
-        current_syscall_error.invalidArgumentNumber = 1;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidArgument;
+        NODE_STATE(ksCurSyscallError).invalidArgumentNumber = 1;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (!isIOPortRangeFree(first_port, last_port)) {
         userError("IOPortControl: Some ports in range already in use.");
-        current_syscall_error.type = seL4_RevokeFirst;
+        NODE_STATE(ksCurSyscallError).type = seL4_RevokeFirst;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -227,7 +227,7 @@ exception_t decodeX86PortInvocation(
     if (invLabel == X86IOPortIn8 || invLabel == X86IOPortIn16 || invLabel == X86IOPortIn32) {
         if (length < 1) {
             userError("IOPort: Truncated message.");
-            current_syscall_error.type = seL4_TruncatedMessage;
+            NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
             return EXCEPTION_SYSCALL_ERROR;
         }
         /* Get the port the user is trying to read from. */
@@ -252,7 +252,7 @@ exception_t decodeX86PortInvocation(
         /* Ensure the incoming message is long enough for the write. */
         if (length < 2) {
             userError("IOPort Out: Truncated message.");
-            current_syscall_error.type = seL4_TruncatedMessage;
+            NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
             return EXCEPTION_SYSCALL_ERROR;
         }
         /* Get the port the user is trying to write to. */
@@ -286,7 +286,7 @@ exception_t decodeX86PortInvocation(
         return invokeX86PortOut(invLabel, port, data);
     } else {
         userError("IOPort: Unknown operation.");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 }

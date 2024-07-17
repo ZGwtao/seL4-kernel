@@ -76,7 +76,7 @@ findEPTForASID_ret_t findEPTForASID(asid_t asid)
 
     asid_map = findMapForASID(asid);
     if (asid_map_get_type(asid_map) != asid_map_asid_map_ept) {
-        current_lookup_fault = lookup_fault_invalid_root_new();
+        NODE_STATE(ksCurLookupFault) = lookup_fault_invalid_root_new();
 
         ret.ept = NULL;
         ret.status = EXCEPTION_LOOKUP_FAULT;
@@ -101,7 +101,7 @@ static lookupEPTPDPTSlot_ret_t CONST lookupEPTPDPTSlot(ept_pml4e_t *pml4, vptr_t
     pml4Slot = lookupEPTPML4Slot(pml4, vptr);
 
     if (!ept_pml4e_ptr_get_read(pml4Slot)) {
-        current_lookup_fault = lookup_fault_missing_capability_new(EPT_PML4_INDEX_OFFSET);
+        NODE_STATE(ksCurLookupFault) = lookup_fault_missing_capability_new(EPT_PML4_INDEX_OFFSET);
 
         ret.pdptSlot = NULL;
         ret.status = EXCEPTION_LOOKUP_FAULT;
@@ -122,16 +122,16 @@ static lookupEPTPDSlot_ret_t lookupEPTPDSlot(ept_pml4e_t *pml4, vptr_t vptr)
 
     lu_ret = lookupEPTPDPTSlot(pml4, vptr);
     if (lu_ret.status != EXCEPTION_NONE) {
-        current_syscall_error.type = seL4_FailedLookup;
-        current_syscall_error.failedLookupWasSource = false;
-        /* current_lookup_fault will have been set by lookupEPTPDPTSlot */
+        NODE_STATE(ksCurSyscallError).type = seL4_FailedLookup;
+        NODE_STATE(ksCurSyscallError).failedLookupWasSource = false;
+        /* NODE_STATE(ksCurLookupFault) will have been set by lookupEPTPDPTSlot */
         ret.pdSlot = NULL;
         ret.status = EXCEPTION_LOOKUP_FAULT;
         return ret;
     }
 
     if (!ept_pdpte_ptr_get_read(lu_ret.pdptSlot)) {
-        current_lookup_fault = lookup_fault_missing_capability_new(EPT_PDPT_INDEX_OFFSET);
+        NODE_STATE(ksCurLookupFault) = lookup_fault_missing_capability_new(EPT_PDPT_INDEX_OFFSET);
 
         ret.pdSlot = NULL;
         ret.status = EXCEPTION_LOOKUP_FAULT;
@@ -152,9 +152,9 @@ static lookupEPTPTSlot_ret_t lookupEPTPTSlot(ept_pml4e_t *pml4, vptr_t vptr)
 
     lu_ret = lookupEPTPDSlot(pml4, vptr);
     if (lu_ret.status != EXCEPTION_NONE) {
-        current_syscall_error.type = seL4_FailedLookup;
-        current_syscall_error.failedLookupWasSource = false;
-        /* current_lookup_fault will have been set by lookupEPTPDSlot */
+        NODE_STATE(ksCurSyscallError).type = seL4_FailedLookup;
+        NODE_STATE(ksCurSyscallError).failedLookupWasSource = false;
+        /* NODE_STATE(ksCurLookupFault) will have been set by lookupEPTPDSlot */
         ret.ptSlot = NULL;
         ret.status = EXCEPTION_LOOKUP_FAULT;
         return ret;
@@ -162,7 +162,7 @@ static lookupEPTPTSlot_ret_t lookupEPTPTSlot(ept_pml4e_t *pml4, vptr_t vptr)
 
     if ((ept_pde_ptr_get_page_size(lu_ret.pdSlot) != ept_pde_ept_pde_pt) ||
         !ept_pde_ept_pde_pt_ptr_get_read(lu_ret.pdSlot)) {
-        current_lookup_fault = lookup_fault_missing_capability_new(EPT_PD_INDEX_OFFSET);
+        NODE_STATE(ksCurLookupFault) = lookup_fault_missing_capability_new(EPT_PD_INDEX_OFFSET);
 
         ret.ptSlot = NULL;
         ret.status = EXCEPTION_LOOKUP_FAULT;
@@ -276,7 +276,7 @@ static exception_t decodeX86EPTPDPTInvocation(
 
     if (invLabel == X86EPTPDPTUnmap) {
         if (!isFinalCapability(cte)) {
-            current_syscall_error.type = seL4_RevokeFirst;
+            NODE_STATE(ksCurSyscallError).type = seL4_RevokeFirst;
             return EXCEPTION_SYSCALL_ERROR;
         }
         setThreadState(NODE_STATE(ksCurThread), ThreadState_Restart);
@@ -285,20 +285,20 @@ static exception_t decodeX86EPTPDPTInvocation(
 
     if (invLabel != X86EPTPDPTMap) {
         userError("X86EPTPDPT Illegal operation.");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
-    if (length < 2 || current_extra_caps.excaprefs[0] == NULL) {
+    if (length < 2 || NODE_STATE(ksCurrentExtraCaps).excaprefs[0] == NULL) {
         userError("X86EPTPDPTMap: Truncated message.");
-        current_syscall_error.type = seL4_TruncatedMessage;
+        NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (cap_ept_pdpt_cap_get_capPDPTIsMapped(cap)) {
         userError("X86EPTPDPTMap: EPT PDPT is already mapped to a PML4.");
-        current_syscall_error.type = seL4_InvalidCapability;
-        current_syscall_error.invalidCapNumber = 0;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 0;
 
         return EXCEPTION_SYSCALL_ERROR;
     }
@@ -308,12 +308,12 @@ static exception_t decodeX86EPTPDPTInvocation(
      * this results in an error shifting by greater than 31 bits, so we manually
      * force a 64-bit variable to do the shifting with */
     vaddr = vaddr & ~(((uint64_t)1 << EPT_PML4_INDEX_OFFSET) - 1);
-    pml4Cap = current_extra_caps.excaprefs[0]->cap;
+    pml4Cap = NODE_STATE(ksCurrentExtraCaps).excaprefs[0]->cap;
 
     if (cap_get_capType(pml4Cap) != cap_ept_pml4_cap) {
         userError("X86EPTPDPTMap: Not a valid EPT PML4.");
-        current_syscall_error.type = seL4_InvalidCapability;
-        current_syscall_error.invalidCapNumber = 1;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 1;
 
         return EXCEPTION_SYSCALL_ERROR;
     }
@@ -323,15 +323,15 @@ static exception_t decodeX86EPTPDPTInvocation(
 
     find_ret = findEPTForASID(asid);
     if (find_ret.status != EXCEPTION_NONE) {
-        current_syscall_error.type = seL4_FailedLookup;
-        current_syscall_error.failedLookupWasSource = false;
+        NODE_STATE(ksCurSyscallError).type = seL4_FailedLookup;
+        NODE_STATE(ksCurSyscallError).failedLookupWasSource = false;
 
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (find_ret.ept != pml4) {
-        current_syscall_error.type = seL4_InvalidCapability;
-        current_syscall_error.invalidCapNumber = 1;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 1;
 
         return EXCEPTION_SYSCALL_ERROR;
     }
@@ -340,7 +340,7 @@ static exception_t decodeX86EPTPDPTInvocation(
 
     if (ept_pml4e_ptr_get_read(pml4Slot)) {
         userError("X86EPTPDPTMap: PDPT already mapped here.");
-        current_syscall_error.type = seL4_DeleteFirst;
+        NODE_STATE(ksCurSyscallError).type = seL4_DeleteFirst;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -479,7 +479,7 @@ exception_t decodeX86EPTPDInvocation(
 
     if (invLabel == X86EPTPDUnmap) {
         if (!isFinalCapability(cte)) {
-            current_syscall_error.type = seL4_RevokeFirst;
+            NODE_STATE(ksCurSyscallError).type = seL4_RevokeFirst;
             return EXCEPTION_SYSCALL_ERROR;
         }
         setThreadState(NODE_STATE(ksCurThread), ThreadState_Restart);
@@ -488,33 +488,33 @@ exception_t decodeX86EPTPDInvocation(
 
     if (invLabel != X86EPTPDMap) {
         userError("X86EPTPD Illegal operation.");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
-    if (length < 2 || current_extra_caps.excaprefs[0] == NULL) {
+    if (length < 2 || NODE_STATE(ksCurrentExtraCaps).excaprefs[0] == NULL) {
         userError("X86EPTPDMap: Truncated message.");
-        current_syscall_error.type = seL4_TruncatedMessage;
+        NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (cap_ept_pd_cap_get_capPDIsMapped(cap)) {
         userError("X86EPTPDMap: EPT Page directory is already mapped to a PDPT.");
-        current_syscall_error.type =
+        NODE_STATE(ksCurSyscallError).type =
             seL4_InvalidCapability;
-        current_syscall_error.invalidCapNumber = 0;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 0;
 
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     vaddr = getSyscallArg(0, buffer);
     vaddr = vaddr & ~MASK(EPT_PDPT_INDEX_OFFSET);
-    pml4Cap = current_extra_caps.excaprefs[0]->cap;
+    pml4Cap = NODE_STATE(ksCurrentExtraCaps).excaprefs[0]->cap;
 
     if (cap_get_capType(pml4Cap) != cap_ept_pml4_cap) {
         userError("X86EPTPDMap: Not a valid EPT pml4.");
-        current_syscall_error.type = seL4_InvalidCapability;
-        current_syscall_error.invalidCapNumber = 1;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 1;
 
         return EXCEPTION_SYSCALL_ERROR;
     }
@@ -525,30 +525,30 @@ exception_t decodeX86EPTPDInvocation(
     find_ret = findEPTForASID(asid);
     if (find_ret.status != EXCEPTION_NONE) {
         userError("X86EPTPDMap: EPT PML4 is not mapped.");
-        current_syscall_error.type = seL4_FailedLookup;
-        current_syscall_error.failedLookupWasSource = false;
+        NODE_STATE(ksCurSyscallError).type = seL4_FailedLookup;
+        NODE_STATE(ksCurSyscallError).failedLookupWasSource = false;
 
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (find_ret.ept != pml4) {
         userError("X86EPTPDMap: EPT PML4 asid is invalid.");
-        current_syscall_error.type = seL4_InvalidCapability;
-        current_syscall_error.invalidCapNumber = 1;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 1;
 
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     lu_ret = lookupEPTPDPTSlot(pml4, vaddr);
     if (lu_ret.status != EXCEPTION_NONE) {
-        current_syscall_error.type = seL4_FailedLookup;
-        current_syscall_error.failedLookupWasSource = false;
+        NODE_STATE(ksCurSyscallError).type = seL4_FailedLookup;
+        NODE_STATE(ksCurSyscallError).failedLookupWasSource = false;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (ept_pdpte_ptr_get_read(lu_ret.pdptSlot)) {
         userError("X86EPTPDMap: Page directory already mapped here.");
-        current_syscall_error.type = seL4_DeleteFirst;
+        NODE_STATE(ksCurSyscallError).type = seL4_DeleteFirst;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -666,7 +666,7 @@ exception_t decodeX86EPTPTInvocation(
 
     if (invLabel == X86EPTPTUnmap) {
         if (!isFinalCapability(cte)) {
-            current_syscall_error.type = seL4_RevokeFirst;
+            NODE_STATE(ksCurSyscallError).type = seL4_RevokeFirst;
             return EXCEPTION_SYSCALL_ERROR;
         }
         setThreadState(NODE_STATE(ksCurThread), ThreadState_Restart);
@@ -675,34 +675,34 @@ exception_t decodeX86EPTPTInvocation(
 
     if (invLabel != X86EPTPTMap) {
         userError("X86EPTPT Illegal operation.");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
-    if (length < 2 || current_extra_caps.excaprefs[0] == NULL) {
+    if (length < 2 || NODE_STATE(ksCurrentExtraCaps).excaprefs[0] == NULL) {
         userError("X86EPTPT: Truncated message.");
-        current_syscall_error.type = seL4_TruncatedMessage;
+        NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (cap_ept_pt_cap_get_capPTIsMapped(cap)) {
         userError("X86EPTPT EPT Page table is already mapped to an EPT page directory.");
-        current_syscall_error.type =
+        NODE_STATE(ksCurSyscallError).type =
             seL4_InvalidCapability;
-        current_syscall_error.invalidCapNumber = 0;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 0;
 
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     vaddr = getSyscallArg(0, buffer);
     vaddr = vaddr & ~MASK(EPT_PD_INDEX_OFFSET);
-    pml4Cap = current_extra_caps.excaprefs[0]->cap;
+    pml4Cap = NODE_STATE(ksCurrentExtraCaps).excaprefs[0]->cap;
 
     if (cap_get_capType(pml4Cap) != cap_ept_pml4_cap ||
         !cap_ept_pml4_cap_get_capPML4IsMapped(pml4Cap)) {
         userError("X86EPTPTMap: Not a valid EPT pml4.");
-        current_syscall_error.type = seL4_InvalidCapability;
-        current_syscall_error.invalidCapNumber = 1;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 1;
 
         return EXCEPTION_SYSCALL_ERROR;
     }
@@ -712,24 +712,24 @@ exception_t decodeX86EPTPTInvocation(
 
     find_ret = findEPTForASID(asid);
     if (find_ret.status != EXCEPTION_NONE) {
-        current_syscall_error.type = seL4_FailedLookup;
-        current_syscall_error.failedLookupWasSource = false;
+        NODE_STATE(ksCurSyscallError).type = seL4_FailedLookup;
+        NODE_STATE(ksCurSyscallError).failedLookupWasSource = false;
 
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (find_ret.ept != pml4) {
-        current_syscall_error.type = seL4_InvalidCapability;
-        current_syscall_error.invalidCapNumber = 1;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 1;
 
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     lu_ret = lookupEPTPDSlot(pml4, vaddr);
     if (lu_ret.status != EXCEPTION_NONE) {
-        current_syscall_error.type = seL4_FailedLookup;
-        current_syscall_error.failedLookupWasSource = false;
-        /* current_lookup_fault will have been set by lookupPTSlot */
+        NODE_STATE(ksCurSyscallError).type = seL4_FailedLookup;
+        NODE_STATE(ksCurSyscallError).failedLookupWasSource = false;
+        /* NODE_STATE(ksCurLookupFault) will have been set by lookupPTSlot */
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -738,7 +738,7 @@ exception_t decodeX86EPTPTInvocation(
         ((ept_pde_ptr_get_page_size(lu_ret.pdSlot) == ept_pde_ept_pde_2m) &&
          ept_pde_ept_pde_2m_ptr_get_read(lu_ret.pdSlot))) {
         userError("X86EPTPTMap: Page table already mapped here");
-        current_syscall_error.type = seL4_DeleteFirst;
+        NODE_STATE(ksCurSyscallError).type = seL4_DeleteFirst;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -804,14 +804,14 @@ exception_t decodeX86EPTPageMap(
     vaddr = vaddr & ~MASK(EPT_PT_INDEX_OFFSET);
     w_rightsMask = getSyscallArg(1, buffer);
     vmAttr = vmAttributesFromWord(getSyscallArg(2, buffer));
-    pml4Cap = current_extra_caps.excaprefs[0]->cap;
+    pml4Cap = NODE_STATE(ksCurrentExtraCaps).excaprefs[0]->cap;
 
     capVMRights = cap_frame_cap_get_capFVMRights(cap);
 
     if (cap_frame_cap_get_capFMappedASID(cap) != asidInvalid) {
         userError("X86EPTPageMap: Frame already mapped.");
-        current_syscall_error.type = seL4_InvalidCapability;
-        current_syscall_error.invalidCapNumber = 0;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 0;
 
         return EXCEPTION_SYSCALL_ERROR;
     }
@@ -821,8 +821,8 @@ exception_t decodeX86EPTPageMap(
     if (cap_get_capType(pml4Cap) != cap_ept_pml4_cap ||
         !cap_ept_pml4_cap_get_capPML4IsMapped(pml4Cap)) {
         userError("X86EPTPageMap: Attempting to map frame into invalid ept pml4.");
-        current_syscall_error.type = seL4_InvalidCapability;
-        current_syscall_error.invalidCapNumber = 1;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 1;
 
         return EXCEPTION_SYSCALL_ERROR;
     }
@@ -832,15 +832,15 @@ exception_t decodeX86EPTPageMap(
 
     findEPTForASID_ret_t find_ret = findEPTForASID(asid);
     if (find_ret.status != EXCEPTION_NONE) {
-        current_syscall_error.type = seL4_FailedLookup;
-        current_syscall_error.failedLookupWasSource = false;
+        NODE_STATE(ksCurSyscallError).type = seL4_FailedLookup;
+        NODE_STATE(ksCurSyscallError).failedLookupWasSource = false;
 
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (find_ret.ept != pml4) {
-        current_syscall_error.type = seL4_InvalidCapability;
-        current_syscall_error.invalidCapNumber = 1;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 1;
 
         return EXCEPTION_SYSCALL_ERROR;
     }
@@ -849,7 +849,7 @@ exception_t decodeX86EPTPageMap(
     vmRights = maskVMRights(capVMRights, rightsFromWord(w_rightsMask));
 
     if (!checkVPAlignment(frameSize, vaddr)) {
-        current_syscall_error.type = seL4_AlignmentError;
+        NODE_STATE(ksCurSyscallError).type = seL4_AlignmentError;
 
         return EXCEPTION_SYSCALL_ERROR;
     }
@@ -868,15 +868,15 @@ exception_t decodeX86EPTPageMap(
 
         lu_ret = lookupEPTPTSlot(pml4, vaddr);
         if (lu_ret.status != EXCEPTION_NONE) {
-            current_syscall_error.type = seL4_FailedLookup;
-            current_syscall_error.failedLookupWasSource = false;
-            /* current_lookup_fault will have been set by lookupEPTPTSlot */
+            NODE_STATE(ksCurSyscallError).type = seL4_FailedLookup;
+            NODE_STATE(ksCurSyscallError).failedLookupWasSource = false;
+            /* NODE_STATE(ksCurLookupFault) will have been set by lookupEPTPTSlot */
             return EXCEPTION_SYSCALL_ERROR;
         }
 
         if (ept_pte_ptr_get_read(lu_ret.ptSlot)) {
             userError("X86EPTPageMap: Mapping already present.");
-            current_syscall_error.type = seL4_DeleteFirst;
+            NODE_STATE(ksCurSyscallError).type = seL4_DeleteFirst;
             return EXCEPTION_SYSCALL_ERROR;
         }
 
@@ -900,9 +900,9 @@ exception_t decodeX86EPTPageMap(
         lu_ret = lookupEPTPDSlot(pml4, vaddr);
         if (lu_ret.status != EXCEPTION_NONE) {
             userError("X86EPTPageMap: Need a page directory first.");
-            current_syscall_error.type = seL4_FailedLookup;
-            current_syscall_error.failedLookupWasSource = false;
-            /* current_lookup_fault will have been set by lookupEPTPDSlot */
+            NODE_STATE(ksCurSyscallError).type = seL4_FailedLookup;
+            NODE_STATE(ksCurSyscallError).failedLookupWasSource = false;
+            /* NODE_STATE(ksCurLookupFault) will have been set by lookupEPTPDSlot */
             return EXCEPTION_SYSCALL_ERROR;
         }
 
@@ -910,20 +910,20 @@ exception_t decodeX86EPTPageMap(
         if ((ept_pde_ptr_get_page_size(lu_ret.pdSlot) == ept_pde_ept_pde_pt) &&
             ept_pde_ept_pde_pt_ptr_get_read(lu_ret.pdSlot)) {
             userError("X86EPTPageMap: Page table already present.");
-            current_syscall_error.type = seL4_DeleteFirst;
+            NODE_STATE(ksCurSyscallError).type = seL4_DeleteFirst;
             return EXCEPTION_SYSCALL_ERROR;
         }
         if (LARGE_PAGE_BITS != EPT_PD_INDEX_OFFSET &&
             (ept_pde_ptr_get_page_size(lu_ret.pdSlot + 1) == ept_pde_ept_pde_pt) &&
             ept_pde_ept_pde_pt_ptr_get_read(lu_ret.pdSlot + 1)) {
             userError("X86EPTPageMap: Page table already present.");
-            current_syscall_error.type = seL4_DeleteFirst;
+            NODE_STATE(ksCurSyscallError).type = seL4_DeleteFirst;
             return EXCEPTION_SYSCALL_ERROR;
         }
         if ((ept_pde_ptr_get_page_size(lu_ret.pdSlot) == ept_pde_ept_pde_2m) &&
             ept_pde_ept_pde_2m_ptr_get_read(lu_ret.pdSlot)) {
             userError("X86EPTPageMap: Mapping already present.");
-            current_syscall_error.type = seL4_DeleteFirst;
+            NODE_STATE(ksCurSyscallError).type = seL4_DeleteFirst;
             return EXCEPTION_SYSCALL_ERROR;
         }
 
@@ -953,8 +953,8 @@ exception_t decodeX86EPTPageMap(
         /* When initializing EPT we only checked for support for 4K and 2M
          * pages, so we must disallow attempting to use any other */
         userError("X86EPTPageMap: Attempted to map unsupported page size.");
-        current_syscall_error.type = seL4_InvalidCapability;
-        current_syscall_error.invalidCapNumber = 0;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 0;
         return EXCEPTION_SYSCALL_ERROR;
     }
 }

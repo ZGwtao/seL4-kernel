@@ -552,7 +552,7 @@ findVSpaceForASID_ret_t findVSpaceForASID(asid_t asid)
 
     asid_map = findMapForASID(asid);
     if (asid_map_get_type(asid_map) != asid_map_asid_map_vspace) {
-        current_lookup_fault = lookup_fault_invalid_root_new();
+        NODE_STATE(ksCurLookupFault) = lookup_fault_invalid_root_new();
 
         ret.vspace_root = NULL;
         ret.status = EXCEPTION_LOOKUP_FAULT;
@@ -574,11 +574,11 @@ exception_t handleVMFault(tcb_t *thread, vm_fault_type_t vm_faultType)
 
     switch (vm_faultType) {
     case X86DataFault:
-        current_fault = seL4_Fault_VMFault_new(addr, fault, false);
+        NODE_STATE(ksCurFault) = seL4_Fault_VMFault_new(addr, fault, false);
         return EXCEPTION_FAULT;
 
     case X86InstructionFault:
-        current_fault = seL4_Fault_VMFault_new(addr, fault, true);
+        NODE_STATE(ksCurFault) = seL4_Fault_VMFault_new(addr, fault, true);
         return EXCEPTION_FAULT;
 
     default:
@@ -629,7 +629,7 @@ lookupPTSlot_ret_t lookupPTSlot(vspace_root_t *vspace, vptr_t vptr)
     }
     if ((pde_ptr_get_page_size(pdSlot.pdSlot) != pde_pde_pt) ||
         !pde_pde_pt_ptr_get_present(pdSlot.pdSlot)) {
-        current_lookup_fault = lookup_fault_missing_capability_new(PAGE_BITS + PT_INDEX_BITS);
+        NODE_STATE(ksCurLookupFault) = lookup_fault_missing_capability_new(PAGE_BITS + PT_INDEX_BITS);
         ret.ptSlot = NULL;
         ret.status = EXCEPTION_LOOKUP_FAULT;
         return ret;
@@ -652,18 +652,18 @@ exception_t checkValidIPCBuffer(vptr_t vptr, cap_t cap)
 {
     if (cap_get_capType(cap) != cap_frame_cap) {
         userError("IPC Buffer is an invalid cap.");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
     if (unlikely(cap_frame_cap_get_capFIsDevice(cap))) {
         userError("Specifying a device frame as an IPC buffer is not permitted.");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (!IS_ALIGNED(vptr, seL4_IPCBufferSizeBits)) {
         userError("IPC Buffer vaddr 0x%x is not aligned.", (int)vptr);
-        current_syscall_error.type = seL4_AlignmentError;
+        NODE_STATE(ksCurSyscallError).type = seL4_AlignmentError;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -872,10 +872,10 @@ static create_mapping_pte_return_t createSafeMappingEntries_PTE(paddr_t base, wo
 
     lu_ret = lookupPTSlot(vspace, vaddr);
     if (lu_ret.status != EXCEPTION_NONE) {
-        current_syscall_error.type = seL4_FailedLookup;
-        current_syscall_error.failedLookupWasSource = false;
+        NODE_STATE(ksCurSyscallError).type = seL4_FailedLookup;
+        NODE_STATE(ksCurSyscallError).failedLookupWasSource = false;
         ret.status = EXCEPTION_SYSCALL_ERROR;
-        /* current_lookup_fault will have been set by lookupPTSlot */
+        /* NODE_STATE(ksCurLookupFault) will have been set by lookupPTSlot */
         return ret;
     }
 
@@ -901,10 +901,10 @@ static create_mapping_pde_return_t createSafeMappingEntries_PDE(paddr_t base, wo
 
     lu_ret = lookupPDSlot(vspace, vaddr);
     if (lu_ret.status != EXCEPTION_NONE) {
-        current_syscall_error.type = seL4_FailedLookup;
-        current_syscall_error.failedLookupWasSource = false;
+        NODE_STATE(ksCurSyscallError).type = seL4_FailedLookup;
+        NODE_STATE(ksCurSyscallError).failedLookupWasSource = false;
         ret.status = EXCEPTION_SYSCALL_ERROR;
-        /* current_lookup_fault will have been set by lookupPDSlot */
+        /* NODE_STATE(ksCurLookupFault) will have been set by lookupPDSlot */
         return ret;
     }
     ret.pdSlot = lu_ret.pdSlot;
@@ -912,7 +912,7 @@ static create_mapping_pde_return_t createSafeMappingEntries_PDE(paddr_t base, wo
     /* check for existing page table */
     if ((pde_ptr_get_page_size(ret.pdSlot) == pde_pde_pt) &&
         (pde_pde_pt_ptr_get_present(ret.pdSlot))) {
-        current_syscall_error.type = seL4_DeleteFirst;
+        NODE_STATE(ksCurSyscallError).type = seL4_DeleteFirst;
         ret.status = EXCEPTION_SYSCALL_ERROR;
         return ret;
     }
@@ -947,8 +947,8 @@ exception_t decodeX86FrameInvocation(
         vm_page_size_t  frameSize;
         asid_t          asid;
 
-        if (length < 3 || current_extra_caps.excaprefs[0] == NULL) {
-            current_syscall_error.type = seL4_TruncatedMessage;
+        if (length < 3 || NODE_STATE(ksCurrentExtraCaps).excaprefs[0] == NULL) {
+            NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
 
             return EXCEPTION_SYSCALL_ERROR;
         }
@@ -957,14 +957,14 @@ exception_t decodeX86FrameInvocation(
         vaddr = getSyscallArg(0, buffer);
         w_rightsMask = getSyscallArg(1, buffer);
         vmAttr = vmAttributesFromWord(getSyscallArg(2, buffer));
-        vspaceCap = current_extra_caps.excaprefs[0]->cap;
+        vspaceCap = NODE_STATE(ksCurrentExtraCaps).excaprefs[0]->cap;
 
         capVMRights = cap_frame_cap_get_capFVMRights(cap);
 
         if (!isValidNativeRoot(vspaceCap)) {
             userError("X86FrameMap: Attempting to map frame into invalid page directory cap.");
-            current_syscall_error.type = seL4_InvalidCapability;
-            current_syscall_error.invalidCapNumber = 1;
+            NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+            NODE_STATE(ksCurSyscallError).invalidCapNumber = 1;
 
             return EXCEPTION_SYSCALL_ERROR;
         }
@@ -973,23 +973,23 @@ exception_t decodeX86FrameInvocation(
 
         if (cap_frame_cap_get_capFMappedASID(cap) != asidInvalid) {
             if (cap_frame_cap_get_capFMappedASID(cap) != asid) {
-                current_syscall_error.type = seL4_InvalidCapability;
-                current_syscall_error.invalidCapNumber = 1;
+                NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+                NODE_STATE(ksCurSyscallError).invalidCapNumber = 1;
 
                 return EXCEPTION_SYSCALL_ERROR;
             }
 
             if (cap_frame_cap_get_capFMapType(cap) != X86_MappingVSpace) {
                 userError("X86Frame: Attempting to remap frame with different mapping type");
-                current_syscall_error.type = seL4_IllegalOperation;
+                NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
 
                 return EXCEPTION_SYSCALL_ERROR;
             }
 
             if (cap_frame_cap_get_capFMappedAddress(cap) != vaddr) {
                 userError("X86Frame: Attempting to map frame into multiple addresses");
-                current_syscall_error.type = seL4_InvalidArgument;
-                current_syscall_error.invalidArgumentNumber = 0;
+                NODE_STATE(ksCurSyscallError).type = seL4_InvalidArgument;
+                NODE_STATE(ksCurSyscallError).invalidArgumentNumber = 0;
 
                 return EXCEPTION_SYSCALL_ERROR;
             }
@@ -999,8 +999,8 @@ exception_t decodeX86FrameInvocation(
             /* check vaddr and vtop against USER_TOP to catch case where vaddr + frame_size wrapped around */
             if (vaddr > USER_TOP || vtop > USER_TOP) {
                 userError("X86Frame: Mapping address too high.");
-                current_syscall_error.type = seL4_InvalidArgument;
-                current_syscall_error.invalidArgumentNumber = 0;
+                NODE_STATE(ksCurSyscallError).type = seL4_InvalidArgument;
+                NODE_STATE(ksCurSyscallError).invalidArgumentNumber = 0;
 
                 return EXCEPTION_SYSCALL_ERROR;
             }
@@ -1011,15 +1011,15 @@ exception_t decodeX86FrameInvocation(
 
             find_ret = findVSpaceForASID(asid);
             if (find_ret.status != EXCEPTION_NONE) {
-                current_syscall_error.type = seL4_FailedLookup;
-                current_syscall_error.failedLookupWasSource = false;
+                NODE_STATE(ksCurSyscallError).type = seL4_FailedLookup;
+                NODE_STATE(ksCurSyscallError).failedLookupWasSource = false;
 
                 return EXCEPTION_SYSCALL_ERROR;
             }
 
             if (find_ret.vspace_root != vspace) {
-                current_syscall_error.type = seL4_InvalidCapability;
-                current_syscall_error.invalidCapNumber = 1;
+                NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+                NODE_STATE(ksCurSyscallError).invalidCapNumber = 1;
 
                 return EXCEPTION_SYSCALL_ERROR;
             }
@@ -1028,7 +1028,7 @@ exception_t decodeX86FrameInvocation(
         vmRights = maskVMRights(capVMRights, rightsFromWord(w_rightsMask));
 
         if (!checkVPAlignment(frameSize, vaddr)) {
-            current_syscall_error.type = seL4_AlignmentError;
+            NODE_STATE(ksCurSyscallError).type = seL4_AlignmentError;
 
             return EXCEPTION_SYSCALL_ERROR;
         }
@@ -1099,7 +1099,7 @@ exception_t decodeX86FrameInvocation(
     }
 
     default:
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
 
         return EXCEPTION_SYSCALL_ERROR;
     }
@@ -1150,7 +1150,7 @@ static exception_t decodeX86PageTableInvocation(
 
     if (invLabel == X86PageTableUnmap) {
         if (! isFinalCapability(cte)) {
-            current_syscall_error.type = seL4_RevokeFirst;
+            NODE_STATE(ksCurSyscallError).type = seL4_RevokeFirst;
             userError("X86PageTable: Cannot unmap if more than one cap exists.");
             return EXCEPTION_SYSCALL_ERROR;
         }
@@ -1160,32 +1160,32 @@ static exception_t decodeX86PageTableInvocation(
 
     if (invLabel != X86PageTableMap) {
         userError("X86PageTable: Illegal operation.");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
-    if (length < 2 || current_extra_caps.excaprefs[0] == NULL) {
+    if (length < 2 || NODE_STATE(ksCurrentExtraCaps).excaprefs[0] == NULL) {
         userError("X86PageTable: Truncated message.");
-        current_syscall_error.type = seL4_TruncatedMessage;
+        NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (cap_page_table_cap_get_capPTIsMapped(cap)) {
         userError("X86PageTable: Page table is already mapped to a page directory.");
-        current_syscall_error.type =
+        NODE_STATE(ksCurSyscallError).type =
             seL4_InvalidCapability;
-        current_syscall_error.invalidCapNumber = 0;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 0;
 
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     vaddr = getSyscallArg(0, buffer) & (~MASK(PT_INDEX_BITS + PAGE_BITS));
     attr = vmAttributesFromWord(getSyscallArg(1, buffer));
-    vspaceCap = current_extra_caps.excaprefs[0]->cap;
+    vspaceCap = NODE_STATE(ksCurrentExtraCaps).excaprefs[0]->cap;
 
     if (!isValidNativeRoot(vspaceCap)) {
-        current_syscall_error.type = seL4_InvalidCapability;
-        current_syscall_error.invalidCapNumber = 1;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+        NODE_STATE(ksCurSyscallError).invalidCapNumber = 1;
 
         return EXCEPTION_SYSCALL_ERROR;
     }
@@ -1195,8 +1195,8 @@ static exception_t decodeX86PageTableInvocation(
 
     if (vaddr > USER_TOP) {
         userError("X86PageTable: Mapping address too high.");
-        current_syscall_error.type = seL4_InvalidArgument;
-        current_syscall_error.invalidArgumentNumber = 0;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidArgument;
+        NODE_STATE(ksCurSyscallError).invalidArgumentNumber = 0;
 
         return EXCEPTION_SYSCALL_ERROR;
     }
@@ -1206,15 +1206,15 @@ static exception_t decodeX86PageTableInvocation(
 
         find_ret = findVSpaceForASID(asid);
         if (find_ret.status != EXCEPTION_NONE) {
-            current_syscall_error.type = seL4_FailedLookup;
-            current_syscall_error.failedLookupWasSource = false;
+            NODE_STATE(ksCurSyscallError).type = seL4_FailedLookup;
+            NODE_STATE(ksCurSyscallError).failedLookupWasSource = false;
 
             return EXCEPTION_SYSCALL_ERROR;
         }
 
         if (find_ret.vspace_root != vspace) {
-            current_syscall_error.type = seL4_InvalidCapability;
-            current_syscall_error.invalidCapNumber = 1;
+            NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+            NODE_STATE(ksCurSyscallError).invalidCapNumber = 1;
 
             return EXCEPTION_SYSCALL_ERROR;
         }
@@ -1222,15 +1222,15 @@ static exception_t decodeX86PageTableInvocation(
 
     pdSlot = lookupPDSlot(vspace, vaddr);
     if (pdSlot.status != EXCEPTION_NONE) {
-        current_syscall_error.type = seL4_FailedLookup;
-        current_syscall_error.failedLookupWasSource = false;
+        NODE_STATE(ksCurSyscallError).type = seL4_FailedLookup;
+        NODE_STATE(ksCurSyscallError).failedLookupWasSource = false;
 
         return EXCEPTION_SYSCALL_ERROR;
     }
 
     if (((pde_ptr_get_page_size(pdSlot.pdSlot) == pde_pde_pt) && pde_pde_pt_ptr_get_present(pdSlot.pdSlot)) ||
         ((pde_ptr_get_page_size(pdSlot.pdSlot) == pde_pde_large) && pde_pde_large_ptr_get_present(pdSlot.pdSlot))) {
-        current_syscall_error.type = seL4_DeleteFirst;
+        NODE_STATE(ksCurSyscallError).type = seL4_DeleteFirst;
 
         return EXCEPTION_SYSCALL_ERROR;
     }
@@ -1278,29 +1278,29 @@ exception_t decodeX86MMUInvocation(
         exception_t      status;
 
         if (invLabel != X86ASIDControlMakePool) {
-            current_syscall_error.type = seL4_IllegalOperation;
+            NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
 
             return EXCEPTION_SYSCALL_ERROR;
         }
 
-        if (length < 2 || current_extra_caps.excaprefs[0] == NULL
-            || current_extra_caps.excaprefs[1] == NULL) {
-            current_syscall_error.type = seL4_TruncatedMessage;
+        if (length < 2 || NODE_STATE(ksCurrentExtraCaps).excaprefs[0] == NULL
+            || NODE_STATE(ksCurrentExtraCaps).excaprefs[1] == NULL) {
+            NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
             return EXCEPTION_SYSCALL_ERROR;
         }
 
         index = getSyscallArg(0, buffer);
         depth = getSyscallArg(1, buffer);
-        parentSlot = current_extra_caps.excaprefs[0];
+        parentSlot = NODE_STATE(ksCurrentExtraCaps).excaprefs[0];
         untyped = parentSlot->cap;
-        root = current_extra_caps.excaprefs[1]->cap;
+        root = NODE_STATE(ksCurrentExtraCaps).excaprefs[1]->cap;
 
         /* Find first free pool */
         for (i = 0; i < nASIDPools && x86KSASIDTable[i]; i++);
 
         if (i == nASIDPools) {
             /* no unallocated pool is found */
-            current_syscall_error.type = seL4_DeleteFirst;
+            NODE_STATE(ksCurSyscallError).type = seL4_DeleteFirst;
 
             return EXCEPTION_SYSCALL_ERROR;
         }
@@ -1311,8 +1311,8 @@ exception_t decodeX86MMUInvocation(
         if (cap_get_capType(untyped) != cap_untyped_cap ||
             cap_untyped_cap_get_capBlockSize(untyped) != seL4_ASIDPoolBits ||
             cap_untyped_cap_get_capIsDevice(untyped)) {
-            current_syscall_error.type = seL4_InvalidCapability;
-            current_syscall_error.invalidCapNumber = 1;
+            NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+            NODE_STATE(ksCurSyscallError).invalidCapNumber = 1;
 
             return EXCEPTION_SYSCALL_ERROR;
         }
@@ -1347,39 +1347,39 @@ exception_t decodeX86MMUInvocation(
         asid_t       asid;
 
         if (invLabel != X86ASIDPoolAssign) {
-            current_syscall_error.type = seL4_IllegalOperation;
+            NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
 
             return EXCEPTION_SYSCALL_ERROR;
         }
-        if (current_extra_caps.excaprefs[0] == NULL) {
-            current_syscall_error.type = seL4_TruncatedMessage;
+        if (NODE_STATE(ksCurrentExtraCaps).excaprefs[0] == NULL) {
+            NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
 
             return EXCEPTION_SYSCALL_ERROR;
         }
 
-        vspaceCapSlot = current_extra_caps.excaprefs[0];
+        vspaceCapSlot = NODE_STATE(ksCurrentExtraCaps).excaprefs[0];
         vspaceCap = vspaceCapSlot->cap;
 
         if (!(isVTableRoot(vspaceCap) || VTX_TERNARY(cap_get_capType(vspaceCap) == cap_ept_pml4_cap, 0))
             || cap_get_capMappedASID(vspaceCap) != asidInvalid) {
             userError("X86ASIDPool: Invalid vspace root.");
-            current_syscall_error.type = seL4_InvalidCapability;
-            current_syscall_error.invalidCapNumber = 1;
+            NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+            NODE_STATE(ksCurSyscallError).invalidCapNumber = 1;
 
             return EXCEPTION_SYSCALL_ERROR;
         }
 
         pool = x86KSASIDTable[cap_asid_pool_cap_get_capASIDBase(cap) >> asidLowBits];
         if (!pool) {
-            current_syscall_error.type = seL4_FailedLookup;
-            current_syscall_error.failedLookupWasSource = false;
-            current_lookup_fault = lookup_fault_invalid_root_new();
+            NODE_STATE(ksCurSyscallError).type = seL4_FailedLookup;
+            NODE_STATE(ksCurSyscallError).failedLookupWasSource = false;
+            NODE_STATE(ksCurLookupFault) = lookup_fault_invalid_root_new();
             return EXCEPTION_SYSCALL_ERROR;
         }
 
         if (pool != ASID_POOL_PTR(cap_asid_pool_cap_get_capASIDPool(cap))) {
-            current_syscall_error.type = seL4_InvalidCapability;
-            current_syscall_error.invalidCapNumber = 0;
+            NODE_STATE(ksCurSyscallError).type = seL4_InvalidCapability;
+            NODE_STATE(ksCurSyscallError).invalidCapNumber = 0;
             return EXCEPTION_SYSCALL_ERROR;
         }
 
@@ -1389,7 +1389,7 @@ exception_t decodeX86MMUInvocation(
                                              || asid_map_get_type(pool->array[i]) != asid_map_asid_map_none); i++);
 
         if (i == BIT(asidLowBits)) {
-            current_syscall_error.type = seL4_DeleteFirst;
+            NODE_STATE(ksCurSyscallError).type = seL4_DeleteFirst;
 
             return EXCEPTION_SYSCALL_ERROR;
         }

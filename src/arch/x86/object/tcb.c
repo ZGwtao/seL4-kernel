@@ -50,11 +50,11 @@ exception_t decodeSetEPTRoot(cap_t cap)
     cte_t *rootSlot;
     deriveCap_ret_t dc_ret;
 
-    rootSlot = current_extra_caps.excaprefs[0];
+    rootSlot = NODE_STATE(ksCurrentExtraCaps).excaprefs[0];
 
     if (rootSlot == NULL) {
         userError("TCB SetEPTRoot: Truncated message.");
-        current_syscall_error.type = seL4_TruncatedMessage;
+        NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -62,7 +62,7 @@ exception_t decodeSetEPTRoot(cap_t cap)
 
     if (cap_get_capType(rootCap) != cap_ept_pml4_cap) {
         userError("TCB SetEPTRoot: EPT PDPT is invalid.");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -73,7 +73,7 @@ exception_t decodeSetEPTRoot(cap_t cap)
 
     if (!cap_ept_pml4_cap_get_capPML4IsMapped(dc_ret.cap)) {
         userError("decodeSetEPTRoot: Invalid EPT cap.");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 

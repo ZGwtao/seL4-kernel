@@ -557,7 +557,7 @@ static exception_t decodeVCPUWriteRegisters(cap_t cap, word_t length, word_t *bu
     if (length < 7) {
 #endif /* CONFIG_X86_64_VTX_64BIT_GUESTS */
         userError("VCPU WriteRegisters: Truncated message.");
-        current_syscall_error.type = seL4_TruncatedMessage;
+        NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
     }
     return invokeVCPUWriteRegisters(VCPU_PTR(cap_vcpu_cap_get_capVCPUPtr(cap)), buffer);
@@ -597,7 +597,7 @@ static exception_t decodeVCPUWriteMSR(cap_t cap, word_t length, word_t *buffer)
 
     if (length < 2) {
         userError("VCPU WriteMSR: Not enough arguments.");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -611,7 +611,7 @@ static exception_t decodeVCPUWriteMSR(cap_t cap, word_t length, word_t *buffer)
         break;
     default:
         userError("VCPU WriteMSR: Invalid field %lx.", (long)field);
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
     return invokeWriteMSR(VCPU_PTR(cap_vcpu_cap_get_capVCPUPtr(cap)), buffer, field, value);
@@ -650,7 +650,7 @@ static exception_t decodeVCPUReadMSR(cap_t cap, word_t length, word_t *buffer)
 {
     if (length < 1) {
         userError("VCPU ReadMSR: Not enough arguments.");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
     word_t field = getSyscallArg(0, buffer);
@@ -662,7 +662,7 @@ static exception_t decodeVCPUReadMSR(cap_t cap, word_t length, word_t *buffer)
         break;
     default:
         userError("VCPU ReadMSR: Invalid field %lx.", (long)field);
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
     return invokeReadMSR(VCPU_PTR(cap_vcpu_cap_get_capVCPUPtr(cap)), field, buffer);
@@ -693,20 +693,20 @@ static exception_t decodeEnableIOPort(cap_t cap, word_t length, word_t *buffer)
 
     if (length < 2) {
         userError("VCPU EnableIOPort: Truncated message.");
-        current_syscall_error.type = seL4_TruncatedMessage;
+        NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
     }
-    if (current_extra_caps.excaprefs[0] == NULL) {
+    if (NODE_STATE(ksCurrentExtraCaps).excaprefs[0] == NULL) {
         userError("VCPU EnableIOPort: Truncated message.");
-        current_syscall_error.type = seL4_TruncatedMessage;
+        NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
     }
-    ioSlot = current_extra_caps.excaprefs[0];
-    ioCap  = current_extra_caps.excaprefs[0]->cap;
+    ioSlot = NODE_STATE(ksCurrentExtraCaps).excaprefs[0];
+    ioCap  = NODE_STATE(ksCurrentExtraCaps).excaprefs[0]->cap;
 
     if (cap_get_capType(ioCap) != cap_io_port_cap) {
         userError("VCPU EnableIOPort: IOPort cap is not a IOPort cap.");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -715,8 +715,8 @@ static exception_t decodeEnableIOPort(cap_t cap, word_t length, word_t *buffer)
 
     if (low < cap_io_port_cap_get_capIOPortFirstPort(ioCap) || high > cap_io_port_cap_get_capIOPortLastPort(ioCap)) {
         userError("VCPU EnableIOPort: Requested range not valid for given IOPort cap");
-        current_syscall_error.type = seL4_InvalidArgument;
-        current_syscall_error.invalidArgumentNumber = 0;
+        NODE_STATE(ksCurSyscallError).type = seL4_InvalidArgument;
+        NODE_STATE(ksCurSyscallError).invalidArgumentNumber = 0;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -740,7 +740,7 @@ static exception_t decodeDisableIOPort(cap_t cap, word_t length, word_t *buffer)
 
     if (length < 2) {
         userError("VCPU DisableIOPort: Truncated message.");
-        current_syscall_error.type = seL4_TruncatedMessage;
+        NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -793,7 +793,7 @@ static exception_t decodeWriteVMCS(cap_t cap, word_t length, bool_t call, word_t
 
     if (length < 2) {
         userError("VCPU WriteVMCS: Not enough arguments.");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -885,7 +885,7 @@ static exception_t decodeWriteVMCS(cap_t cap, word_t length, bool_t call, word_t
         break;
     default:
         userError("VCPU WriteVMCS: Invalid field %lx.", (long)field);
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
     return invokeWriteVMCS(VCPU_PTR(cap_vcpu_cap_get_capVCPUPtr(cap)), call, buffer, field, value);
@@ -928,7 +928,7 @@ static exception_t decodeReadVMCS(cap_t cap, word_t length, bool_t call, word_t 
 {
     if (length < 1) {
         userError("VCPU ReadVMCS: Not enough arguments.");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
     word_t field = getSyscallArg(0, buffer);
@@ -1017,7 +1017,7 @@ static exception_t decodeReadVMCS(cap_t cap, word_t length, bool_t call, word_t 
         break;
     default:
         userError("VCPU ReadVMCS: Invalid field %lx.", (long)field);
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
     return invokeReadVMCS(VCPU_PTR(cap_vcpu_cap_get_capVCPUPtr(cap)), field, call, buffer);
@@ -1034,16 +1034,16 @@ static exception_t invokeSetTCB(vcpu_t *vcpu, tcb_t *tcb)
 static exception_t decodeSetTCB(cap_t cap, word_t length, word_t *buffer)
 {
     cap_t tcbCap;
-    if (current_extra_caps.excaprefs[0] == NULL) {
+    if (NODE_STATE(ksCurrentExtraCaps).excaprefs[0] == NULL) {
         userError("VCPU SetTCB: Truncated message.");
-        current_syscall_error.type = seL4_TruncatedMessage;
+        NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
     }
-    tcbCap  = current_extra_caps.excaprefs[0]->cap;
+    tcbCap  = NODE_STATE(ksCurrentExtraCaps).excaprefs[0]->cap;
 
     if (cap_get_capType(tcbCap) != cap_thread_cap) {
         userError("TCB cap is not a TCB cap.");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 
@@ -1119,7 +1119,7 @@ exception_t decodeX86VCPUInvocation(
 #endif /* CONFIG_X86_64_VTX_64BIT_GUESTS */
     default:
         userError("VCPU: Illegal operation.");
-        current_syscall_error.type = seL4_IllegalOperation;
+        NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
     }
 }
