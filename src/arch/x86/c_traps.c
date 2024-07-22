@@ -35,6 +35,12 @@ void VISIBLE NORETURN c_handle_interrupt(int irq, int syscall)
         x86_enable_ibrs();
     }
 
+#ifdef CONFIG_FINE_GRAINED_LOCKING
+    if (irq == irq_reschedule_ipi) {
+        NODE_READ_LOCK_IRQ;
+    }
+    else
+#endif
     /* Only grab the lock if we are not handling 'int_remote_call_ipi' interrupt
      * also flag this lock as IRQ lock if handling the irq interrupts. */
     NODE_LOCK_IF(irq != int_remote_call_ipi,
@@ -141,19 +147,28 @@ void NORETURN slowpath(syscall_t syscall)
     UNREACHABLE();
 }
 
+void NORETURN slowpath_exclusive(syscall_t syscall)
+{
+    NODE_TAKE_WRITE_IF_READ_HELD;
+    slowpath(syscall);
+}
+
 #ifdef CONFIG_KERNEL_MCS
 void VISIBLE NORETURN c_handle_syscall(word_t cptr, word_t msgInfo, syscall_t syscall, word_t reply)
 #else
 void VISIBLE NORETURN c_handle_syscall(word_t cptr, word_t msgInfo, syscall_t syscall)
 #endif
 {
+    NODE_STATE(ksSyscallNumber) = syscall;
+
     /* need to run this first as the NODE_LOCK code might end up as a function call
      * with a return, and we need to make sure returns are not exploitable yet */
     if (config_set(CONFIG_KERNEL_X86_IBRS_BASIC)) {
         x86_enable_ibrs();
     }
 
-    NODE_LOCK_SYS;
+    /* Replace BKL (NODE_LOCK_SYS) with a READER LOCK */
+    NODE_READ_LOCK;
 
     c_entry_hook();
 
