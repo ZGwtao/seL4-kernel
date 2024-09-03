@@ -594,6 +594,9 @@ void NORETURN fastpath_reply_recv(word_t cptr, word_t msgInfo)
         /* The badge/msginfo do not need to be not sent - this is not necessary for exceptions */
         ep_lock_release(ep_ptr);
         reply_object_lock_release(reply_ptr, "fastpath");
+
+	NODE_UNLOCK_IF_HELD;
+
         restore_user_context();
     } else {
 #endif
@@ -612,7 +615,10 @@ void NORETURN fastpath_reply_recv(word_t cptr, word_t msgInfo)
 
         ep_lock_release(ep_ptr);
         reply_object_lock_release(reply_ptr, "fastpath");
-        fastpath_restore(badge, msgInfo, NODE_STATE(ksCurThread));
+
+	NODE_UNLOCK_IF_HELD;
+
+	fastpath_restore(badge, msgInfo, NODE_STATE(ksCurThread));
 
 #ifdef CONFIG_EXCEPTION_FASTPATH
     }
