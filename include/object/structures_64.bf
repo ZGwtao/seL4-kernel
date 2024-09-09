@@ -201,16 +201,23 @@ block sched_control_cap {
 ---- Arch-independent object types
 
 -- Endpoint: size = 16 bytes
+-- MCS Endpoint: size = 32 bytes
 block endpoint {
+#ifdef CONFIG_KERNEL_MCS
+    padding 64
+    field core 64
+#endif
     field epQueue_head 64
 
     field state 2
 #if BF_CANONICAL_RANGE == 48
     field_high epQueue_tail 46
-    field epLock 16
+    padding 8
+    field epLock 8
 #elif BF_CANONICAL_RANGE == 39
     field_high epQueue_tail 37
-    field epLock 25
+    padding 17
+    field epLock 8
 #else
 #error "Unspecified canonical address range"
 #endif
