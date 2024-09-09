@@ -28,6 +28,9 @@ exception_t decodeUntypedInvocation(word_t invLabel, word_t length, cte_t *slot,
 {
     word_t newType, userObjSize, nodeIndex;
     word_t nodeDepth, nodeOffset, nodeWindow;
+#ifdef CONFIG_CORE_TAGGED_OBJECT
+    word_t coreAffinity;
+#endif
     cte_t *rootSlot UNUSED;
     exception_t status;
     cap_t nodeCap;
@@ -48,7 +51,11 @@ exception_t decodeUntypedInvocation(word_t invLabel, word_t length, cte_t *slot,
     }
 
     /* Ensure message length valid. */
+#ifdef CONFIG_CORE_TAGGED_OBJECT
+    if (length < 7 || NODE_STATE(ksCurrentExtraCaps).excaprefs[0] == NULL) {
+#else
     if (length < 6 || NODE_STATE(ksCurrentExtraCaps).excaprefs[0] == NULL) {
+#endif
         userError("Untyped invocation: Truncated message.");
         NODE_STATE(ksCurSyscallError).type = seL4_TruncatedMessage;
         return EXCEPTION_SYSCALL_ERROR;
@@ -61,6 +68,9 @@ exception_t decodeUntypedInvocation(word_t invLabel, word_t length, cte_t *slot,
     nodeDepth   = getSyscallArg(3, buffer);
     nodeOffset  = getSyscallArg(4, buffer);
     nodeWindow  = getSyscallArg(5, buffer);
+#ifdef CONFIG_CORE_TAGGED_OBJECT
+    coreAffinity    = getSyscallArg(6, buffer);
+#endif
 
     rootSlot = NODE_STATE(ksCurrentExtraCaps).excaprefs[0];
 
@@ -107,6 +117,26 @@ exception_t decodeUntypedInvocation(word_t invLabel, word_t length, cte_t *slot,
         NODE_STATE(ksCurSyscallError).type = seL4_InvalidArgument;
         NODE_STATE(ksCurSyscallError).invalidArgumentNumber = 1;
         return EXCEPTION_SYSCALL_ERROR;
+    }
+#endif
+
+#ifdef CONFIG_CORE_TAGGED_OBJECT
+    /*
+     * If the object is unavailable for tagging, the 'coreAffinity' variable
+     * should be set to nil, otherwise an error message will be throw out.
+     */
+    if (!CORE_TAGGED_OBJ_CHECK(newType) && coreAffinity != 0) {
+        userError("Untyped retype: Requested object unavailable for tagging.");
+	NODE_STATE(ksCurSyscallError).type = seL4_InvalidArgument;
+	NODE_STATE(ksCurSyscallError).invalidArgumentNumber = 6;
+	return EXCEPTION_SYSCALL_ERROR;
+    }
+
+    if (CORE_TAGGED_OBJ_CHECK(newType) && (coreAffinity < 0 || coreAffinity > CONFIG_MAX_NUM_NODES)) {
+        userError("Untyped retype: object to tag receive invalid core affinity.");
+	NODE_STATE(ksCurSyscallError).type = seL4_InvalidArgument;
+	NODE_STATE(ksCurSyscallError).invalidArgumentNumber = 6;
+	return EXCEPTION_SYSCALL_ERROR;
     }
 #endif
 
@@ -227,9 +257,15 @@ exception_t decodeUntypedInvocation(word_t invLabel, word_t length, cte_t *slot,
 
     /* Perform the retype. */
     setThreadState(NODE_STATE(ksCurThread), ThreadState_Restart);
+#ifdef CONFIG_CORE_TAGGED_OBJECT
+    return invokeUntyped_Retype(slot, reset,
+                                (void *)alignedFreeRef, newType, userObjSize,
+                                destCNode, nodeOffset, nodeWindow, deviceMemory, coreAffinity);
+#else
     return invokeUntyped_Retype(slot, reset,
                                 (void *)alignedFreeRef, newType, userObjSize,
                                 destCNode, nodeOffset, nodeWindow, deviceMemory);
+#endif
 }
 
 static exception_t resetUntypedCap(cte_t *srcSlot)
@@ -270,11 +306,19 @@ static exception_t resetUntypedCap(cte_t *srcSlot)
     return EXCEPTION_NONE;
 }
 
+#ifdef CONFIG_CORE_TAGGED_OBJECT
+exception_t invokeUntyped_Retype(cte_t *srcSlot,
+                                 bool_t reset, void *retypeBase,
+                                 object_t newType, word_t userSize,
+                                 cte_t *destCNode, word_t destOffset, word_t destLength,
+                                 bool_t deviceMemory, word_t coreAffinity)
+#else
 exception_t invokeUntyped_Retype(cte_t *srcSlot,
                                  bool_t reset, void *retypeBase,
                                  object_t newType, word_t userSize,
                                  cte_t *destCNode, word_t destOffset, word_t destLength,
                                  bool_t deviceMemory)
+#endif
 {
     word_t freeRef;
     word_t totalObjectSize;
@@ -298,9 +342,15 @@ exception_t invokeUntyped_Retype(cte_t *srcSlot,
     srcSlot->cap = cap_untyped_cap_set_capFreeIndex(srcSlot->cap,
                                                     GET_FREE_INDEX(regionBase, freeRef));
 
+#ifdef CONFIG_CORE_TAGGED_OBJECT
+    /* Create new objects and caps when tagging-word is available */
+    createNewObjects(newType, srcSlot, destCNode, destOffset, destLength,
+                     retypeBase, userSize, deviceMemory, coreAffinity);
+#else
     /* Create new objects and caps. */
     createNewObjects(newType, srcSlot, destCNode, destOffset, destLength,
                      retypeBase, userSize, deviceMemory);
+#endif
 
     return EXCEPTION_NONE;
 }

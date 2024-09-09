@@ -306,6 +306,14 @@ config_option(
     DEFAULT_DISABLED OFF
 )
 
+config_option(
+    KernelCoreTaggedObject CORE_TAGGED_OBJECT
+    "Objects can be tagged by core affinities under MCS version of the kernel"
+    DEFAULT OFF
+    DEPENDS "KernelIsMCS"
+    DEFAULT_DISABLED OFF
+)
+
 find_file(
     KernelDomainSchedule default_domain.c
     PATHS src/config

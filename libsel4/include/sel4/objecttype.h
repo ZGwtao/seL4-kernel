@@ -23,3 +23,7 @@ __attribute__((deprecated("use seL4_NotificationObject"))) static const seL4_Obj
 
 typedef seL4_Word api_object_t;
 
+#ifdef CONFIG_CORE_TAGGED_OBJECT
+#define CORE_TAGGED_OBJ_CHECK(objecttype) \
+    ((objecttype == seL4_EndpointObject))
+#endif

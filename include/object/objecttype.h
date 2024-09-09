@@ -22,18 +22,32 @@ bool_t CONST sameRegionAs(cap_t cap_a, cap_t cap_b);
 bool_t CONST sameObjectAs(cap_t cap_a, cap_t cap_b);
 cap_t CONST updateCapData(bool_t preserve, word_t newData, cap_t cap);
 cap_t CONST maskCapRights(seL4_CapRights_t seL4_CapRights, cap_t cap);
+#ifdef CONFIG_CORE_TAGGED_OBJECT
+void performObjectCoreTagging(object_t t, cap_t cap, word_t coreIndex);
+cap_t createObject(object_t t, void *regionBase, word_t, bool_t deviceMemory, bool_t tagged);
+void createNewObjects(object_t t, cte_t *parent,
+                      cte_t *destCNode, word_t destOffset, word_t destLength,
+                      void *regionBase, word_t userSize, bool_t deviceMemory, word_t coreAffinity);
+#else
 cap_t createObject(object_t t, void *regionBase, word_t, bool_t deviceMemory);
 void createNewObjects(object_t t, cte_t *parent,
                       cte_t *destCNode, word_t destOffset, word_t destLength,
                       void *regionBase, word_t userSize, bool_t deviceMemory);
+#endif
 #ifdef CONFIG_KERNEL_MCS
 exception_t decodeInvocation(word_t invLabel, word_t length,
                              cptr_t capIndex, cte_t *slot, cap_t cap,
                              bool_t block, bool_t call,
                              bool_t canDonate, bool_t firstPhase, word_t *buffer);
+#ifdef CONFIG_CORE_TAGGED_OBJECT
+exception_t performInvocation_Endpoint(endpoint_t *ep, word_t badge,
+                                       bool_t canGrant, bool_t canGrantReply,
+                                       bool_t block, bool_t call, bool_t canDonate, bool_t canTag);
+#else
 exception_t performInvocation_Endpoint(endpoint_t *ep, word_t badge,
                                        bool_t canGrant, bool_t canGrantReply,
                                        bool_t block, bool_t call, bool_t canDonate);
+#endif
 exception_t performInvocation_Notification(notification_t *ntfn,
                                            word_t badge);
 exception_t performInvocation_Reply(tcb_t *thread, reply_t *reply, bool_t canGrant);

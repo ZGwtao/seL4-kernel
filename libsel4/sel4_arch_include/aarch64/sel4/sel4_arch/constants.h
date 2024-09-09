@@ -175,12 +175,15 @@ typedef enum {
 #define seL4_HugePageBits 30
 #define seL4_SlotBits 5
 #define seL4_TCBBits 11
-#ifdef CONFIG_KERNEL_MCS
+#ifdef CONFIG_CORE_TAGGED_OBJECT
 #define seL4_EndpointBits 5
+#else
+#define seL4_EndpointBits 4
+#endif
+#ifdef CONFIG_KERNEL_MCS
 #define seL4_NotificationBits 6
 #define seL4_ReplyBits           5
 #else
-#define seL4_EndpointBits 4
 #define seL4_NotificationBits 5
 #endif
 

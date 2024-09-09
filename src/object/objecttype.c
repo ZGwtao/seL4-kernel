@@ -507,7 +507,12 @@ cap_t CONST maskCapRights(seL4_CapRights_t cap_rights, cap_t cap)
     }
 }
 
+#ifdef CONFIG_CORE_TAGGED_OBJECT
+cap_t createObject(object_t t, void *regionBase,
+                   word_t userSize, bool_t deviceMemory, bool_t tagged)
+#else
 cap_t createObject(object_t t, void *regionBase, word_t userSize, bool_t deviceMemory)
+#endif
 {
     /* Handle architecture-specific objects. */
     if (t >= (object_t) seL4_NonArchObjectTypeCount) {
@@ -545,10 +550,15 @@ cap_t createObject(object_t t, void *regionBase, word_t userSize, bool_t deviceM
     }
 
     case seL4_EndpointObject:
+#ifdef CONFIG_CORE_TAGGED_OBJECT
+        return cap_endpoint_cap_new(0, true, true, true, true,
+                                    tagged, EP_REF(regionBase));
+#else
         /** AUXUPD: "(True, ptr_retyp
           (Ptr (ptr_val \<acute>regionBase) :: endpoint_C ptr))" */
         return cap_endpoint_cap_new(0, true, true, true, true,
                                     EP_REF(regionBase));
+#endif
 
     case seL4_NotificationObject:
         /** AUXUPD: "(True, ptr_retyp
@@ -594,28 +604,69 @@ cap_t createObject(object_t t, void *regionBase, word_t userSize, bool_t deviceM
     }
 }
 
+#ifdef CONFIG_CORE_TAGGED_OBJECT
+void performObjectCoreTagging(object_t t, cap_t cap, word_t coreIndex)
+{
+    switch ((api_object_t)t) {
+    case seL4_EndpointObject: {
+        endpoint_t *epptr;
+        epptr = (endpoint_t *)cap_endpoint_cap_get_capEPPtr(cap);
+        endpoint_ptr_set_core(epptr, coreIndex);
+        break;
+    }
+
+    default:
+        fail("Invalid object type for tagging");
+    }
+}
+#endif
+
+#ifdef CONFIG_CORE_TAGGED_OBJECT
+void createNewObjects(object_t t, cte_t *parent,
+                      cte_t *destCNode, word_t destOffset, word_t destLength,
+                      void *regionBase, word_t userSize, bool_t deviceMemory,
+                      word_t coreAffinity)
+#else
 void createNewObjects(object_t t, cte_t *parent,
                       cte_t *destCNode, word_t destOffset, word_t destLength,
                       void *regionBase, word_t userSize, bool_t deviceMemory)
+#endif
 {
     word_t objectSize;
     void *nextFreeArea;
     word_t i;
     word_t totalObjectSize UNUSED;
+#ifdef CONFIG_CORE_TAGGED_OBJECT
+    bool_t tagged;
+#endif
 
     /* ghost check that we're visiting less bytes than the max object size */
     objectSize = getObjectSize(t, userSize);
     totalObjectSize = destLength << objectSize;
     /** GHOSTUPD: "(gs_get_assn cap_get_capSizeBits_'proc \<acute>ghost'state = 0
         \<or> \<acute>totalObjectSize <= gs_get_assn cap_get_capSizeBits_'proc \<acute>ghost'state, id)" */
+#ifdef CONFIG_CORE_TAGGED_OBJECT
+    /* false for normal, true for tagging (object should be tagged)
+     * if any of the condition is false, then it's incorrect to tag */
+    tagged = CORE_TAGGED_OBJ_CHECK(t) && coreAffinity > 0 && coreAffinity <= CONFIG_MAX_NUM_NODES;
+#endif
 
     /* Create the objects. */
     nextFreeArea = regionBase;
     for (i = 0; i < destLength; i++) {
+#ifdef CONFIG_CORE_TAGGED_OBJECT
+        /* Create the cap with tagging info as well as the object */
+        cap_t cap = createObject(t, (void *)((word_t)nextFreeArea + (i << objectSize)),
+                                 userSize, deviceMemory, tagged);
+        /* If tagging is neccessary, then tag the object with core index */
+        if (tagged) {
+             performObjectCoreTagging(t, cap, coreAffinity - 1);
+	}
+#else
         /* Create the object. */
         /** AUXUPD: "(True, typ_region_bytes (ptr_val \<acute> nextFreeArea + ((\<acute> i) << unat (\<acute> objectSize))) (unat (\<acute> objectSize)))" */
         cap_t cap = createObject(t, (void *)((word_t)nextFreeArea + (i << objectSize)), userSize, deviceMemory);
-
+#endif
         /* Insert the cap into the user's cspace. */
         insertNewCap(parent, &destCNode[destOffset + i], cap);
 
@@ -661,14 +712,28 @@ exception_t decodeInvocation(word_t invLabel, word_t length,
             NODE_STATE(ksCurSyscallError).invalidCapNumber = 0;
             return EXCEPTION_SYSCALL_ERROR;
         }
-
+#ifdef CONFIG_CORE_TAGGED_OBJECT
+        //if (unlikely(cap_endpoint_cap_get_capCanTag(cap) &&
+        //             NODE_STATE(ksCurThread)->tcbAffinity != )) {
+        //}
+#endif
         setThreadState(NODE_STATE(ksCurThread), ThreadState_Restart);
 #ifdef CONFIG_KERNEL_MCS
+#ifdef CONFIG_CORE_TAGGED_OBJECT
+        return performInvocation_Endpoint(
+                   EP_PTR(cap_endpoint_cap_get_capEPPtr(cap)),
+                   cap_endpoint_cap_get_capEPBadge(cap),
+                   cap_endpoint_cap_get_capCanGrant(cap),
+                   cap_endpoint_cap_get_capCanGrantReply(cap),
+		   block, call, canDonate,
+		   cap_endpoint_cap_get_capCanTag(cap));
+#else
         return performInvocation_Endpoint(
                    EP_PTR(cap_endpoint_cap_get_capEPPtr(cap)),
                    cap_endpoint_cap_get_capEPBadge(cap),
                    cap_endpoint_cap_get_capCanGrant(cap),
                    cap_endpoint_cap_get_capCanGrantReply(cap), block, call, canDonate);
+#endif
 #else
         return performInvocation_Endpoint(
                    EP_PTR(cap_endpoint_cap_get_capEPPtr(cap)),
@@ -784,6 +849,14 @@ exception_t decodeInvocation(word_t invLabel, word_t length,
 }
 
 #ifdef CONFIG_KERNEL_MCS
+#ifdef CONFIG_CORE_TAGGED_OBJECT
+exception_t performInvocation_Endpoint(endpoint_t *ep, word_t badge, bool_t canGrant, bool_t canGrantReply,
+                                       bool_t block, bool_t call, bool_t canDonate, bool_t canTag)
+{
+    sendIPC(block, call, badge, canGrant, canGrantReply, canDonate, NODE_STATE(ksCurThread), ep);
+    return EXCEPTION_NONE;
+}
+#else
 exception_t performInvocation_Endpoint(endpoint_t *ep, word_t badge,
                                        bool_t canGrant, bool_t canGrantReply,
                                        bool_t block, bool_t call, bool_t canDonate)
@@ -792,6 +865,7 @@ exception_t performInvocation_Endpoint(endpoint_t *ep, word_t badge,
 
     return EXCEPTION_NONE;
 }
+#endif
 #else
 exception_t performInvocation_Endpoint(endpoint_t *ep, word_t badge,
                                        bool_t canGrant, bool_t canGrantReply,

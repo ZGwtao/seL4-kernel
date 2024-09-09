@@ -36,8 +36,13 @@ block untyped_cap {
 #endif
 }
 
+#ifdef CONFIG_CORE_TAGGED_OBJECT
+block endpoint_cap(capEPBadge, capCanGrantReply, capCanGrant, capCanSend,
+                   capCanReceive, capCanTag, capEPPtr, capType) {
+#else
 block endpoint_cap(capEPBadge, capCanGrantReply, capCanGrant, capCanSend,
                    capCanReceive, capEPPtr, capType) {
+#endif
     field capEPBadge 64
 
     field capType 5
@@ -46,7 +51,7 @@ block endpoint_cap(capEPBadge, capCanGrantReply, capCanGrant, capCanSend,
     field capCanReceive 1
     field capCanSend 1
 #if BF_CANONICAL_RANGE == 48
-#ifdef CONFIG_KERNEL_MCS
+#ifdef CONFIG_CORE_TAGGED_OBJECT
     field capCanTag 1
     padding 6
 #else
@@ -54,7 +59,7 @@ block endpoint_cap(capEPBadge, capCanGrantReply, capCanGrant, capCanSend,
 #endif
     field_high capEPPtr 48
 #elif BF_CANONICAL_RANGE == 39
-#ifdef CONFIG_KERNEL_MCS
+#ifdef CONFIG_CORE_TAGGED_OBJECT
     field capCanTag 1
     padding 15
 #else
@@ -211,9 +216,9 @@ block sched_control_cap {
 ---- Arch-independent object types
 
 -- Endpoint: size = 16 bytes
--- MCS Endpoint: size = 32 bytes
+-- MCS (Tagged) Endpoint: size = 32 bytes
 block endpoint {
-#ifdef CONFIG_KERNEL_MCS
+#ifdef CONFIG_CORE_TAGGED_OBJECT
     padding 64
     field core 64
 #endif

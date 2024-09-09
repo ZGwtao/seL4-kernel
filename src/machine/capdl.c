@@ -206,6 +206,9 @@ void cap_ep_print_attrs(cap_t ep)
     cap_endpoint_cap_get_capCanSend(ep) ? putchar('W') : 0;
     cap_endpoint_cap_get_capCanGrant(ep) ? putchar('G') : 0;
     cap_endpoint_cap_get_capCanGrantReply(ep) ? putchar('P') : 0;
+#ifdef CONFIG_CORE_TAGGED_OBJECT
+    cap_endpoint_cap_get_capCanTag(ep) ? putchar('T') : 0;
+#endif
     long unsigned int badge = cap_endpoint_cap_get_capEPBadge(ep);
     badge ? printf(", badge: %lu)\n", badge) : printf(")\n");
 }

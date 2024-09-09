@@ -70,7 +70,10 @@ void sendIPC(bool_t blocking, bool_t do_call, word_t badge,
         /* Get the head of the endpoint queue. */
         queue = ep_ptr_get_queue(epptr);
         dest = queue.head;
-
+#ifdef CONFIG_CORE_TAGGED_OBJECT
+        //if (!canTag) {
+        //}
+#endif
         /* Haskell error "Receive endpoint queue must not be empty" */
         assert(dest);
 
