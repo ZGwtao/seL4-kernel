@@ -46,10 +46,20 @@ block endpoint_cap(capEPBadge, capCanGrantReply, capCanGrant, capCanSend,
     field capCanReceive 1
     field capCanSend 1
 #if BF_CANONICAL_RANGE == 48
+#ifdef CONFIG_KERNEL_MCS
+    field capCanTag 1
+    padding 6
+#else
     padding 7
+#endif
     field_high capEPPtr 48
 #elif BF_CANONICAL_RANGE == 39
+#ifdef CONFIG_KERNEL_MCS
+    field capCanTag 1
+    padding 15
+#else
     padding 16
+#endif
     field_high capEPPtr 39
 #else
 #error "Unspecified canonical address range"
