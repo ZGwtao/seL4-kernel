@@ -203,6 +203,7 @@ void NORETURN fastpath_call(word_t cptr, word_t msgInfo)
     } else {
         endpoint_ptr_mset_epQueue_tail_state(ep_ptr, 0, EPState_Idle);
     }
+    ep_lock_release(ep_ptr);
 
     badge = cap_endpoint_cap_get_capEPBadge(ep_cap);
 
@@ -251,8 +252,6 @@ void NORETURN fastpath_call(word_t cptr, word_t msgInfo)
 
     msgInfo = wordFromMessageInfo(seL4_MessageInfo_set_capsUnwrapped(info, 0));
 
-
-    ep_lock_release(ep_ptr);
 
     NODE_UNLOCK_IF_HELD;
     fastpath_restore(badge, msgInfo, NODE_STATE(ksCurThread));
@@ -544,6 +543,7 @@ void NORETURN fastpath_reply_recv(word_t cptr, word_t msgInfo)
                                              EPState_Recv);
 #endif
     }
+    ep_lock_release(ep_ptr);
 
 #ifdef CONFIG_KERNEL_MCS
     /* update call stack */
@@ -569,6 +569,7 @@ void NORETURN fastpath_reply_recv(word_t cptr, word_t msgInfo)
     callerSlot->cap = cap_null_cap_new();
     callerSlot->cteMDBNode = nullMDBNode;
 #endif
+    reply_object_lock_release(reply_ptr, "fastpath");
 
 #ifdef CONFIG_EXCEPTION_FASTPATH
     if (unlikely(fault_type != seL4_Fault_NullFault)) {
@@ -592,8 +593,6 @@ void NORETURN fastpath_reply_recv(word_t cptr, word_t msgInfo)
         switchToThread_fp(caller, cap_pd, stored_hw_asid);
 
         /* The badge/msginfo do not need to be not sent - this is not necessary for exceptions */
-        ep_lock_release(ep_ptr);
-        reply_object_lock_release(reply_ptr, "fastpath");
 
 	NODE_UNLOCK_IF_HELD;
 
@@ -612,9 +611,6 @@ void NORETURN fastpath_reply_recv(word_t cptr, word_t msgInfo)
         switchToThread_fp(caller, cap_pd, stored_hw_asid);
 
         msgInfo = wordFromMessageInfo(seL4_MessageInfo_set_capsUnwrapped(info, 0));
-
-        ep_lock_release(ep_ptr);
-        reply_object_lock_release(reply_ptr, "fastpath");
 
 	NODE_UNLOCK_IF_HELD;
 
