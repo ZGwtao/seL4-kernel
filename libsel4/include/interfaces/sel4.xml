@@ -85,6 +85,80 @@
 
     </interface>
 
+    <interface name="seL4_Untyped" manual_name="Untyped" cap_description="CPTR to an untyped object.">
+
+        <method id="UntypedRetypeCoreTagged" name="RetypeCoreTagged" manual_name="RetypeCoreTagged" manual_label="untyped_retype_core_tagged">
+            <brief>
+                Retype an untyped object to object available to be tagged with CPU affinity
+            </brief>
+            <description>
+                Given a capability, <texttt text="_service"/>, to an untyped object,
+                creates <texttt text="num_objects"/> of the requested type. Creates
+                <texttt text="num_objects"/> capabilities to the new objects starting
+                at <texttt text="node_offset"/> in the CNode specified by
+                <texttt text="root"/>, <texttt text="node_index"/>, and
+		<texttt text="node_depth"/>. Each newly created object is tagged with
+		a specific <texttt text="core_affinity"/>.
+
+		The interface is almost the same with <autoref label="sec:untyped_retype"/>.
+
+                <docref>See <autoref label="sec:untyped_retype"/> for more information about how untyped
+                memory is retyped.</docref>
+
+                <docref>See <autoref label="sec:caps_to_new_objects"/> for more information about the
+                placement of capabilities to created objects.</docref>
+            </description>
+            <param dir="in" name="type" type="seL4_Word"
+                description="The seL4 object type that we are retyping to."/>
+            <param dir="in" name="size_bits" type="seL4_Word"
+                description="Used to determine the size of variable-sized objects."/>
+            <param dir="in" name="root" type="seL4_CNode"
+                description="CPTR to the CNode at the root of the destination CSpace."/>
+            <param dir="in" name="node_index" type="seL4_Word"
+                description="CPTR to the destination CNode. Resolved relative to the root parameter."/>
+            <param dir="in" name="node_depth" type="seL4_Word"
+                description="Number of bits of node_index to translate when addressing the destination CNode."/>
+            <param dir="in" name="node_offset" type="seL4_Word"
+                description="Number of slots into the node at which capabilities start being placed."/>
+            <param dir="in" name="num_objects" type="seL4_Word"
+                description="Number of capabilities to create."/>
+            <param dir="in" name="core_affinity" type="seL4_Word"
+                description="CPU affinity for objects to bind."/>
+            <error name="seL4_DeleteFirst" description="A capability exists in the destination window of the CNode."/>
+            <error name="seL4_FailedLookup">
+                <description>
+                    The <texttt text="root"/>, <texttt text="node_index"/>, or <texttt text="node_depth"/> is invalid <docref>(see <autoref label="s:cspace-addressing"/>)</docref>.
+                </description>
+            </error>
+            <error name="seL4_IllegalOperation">
+                <description>
+                    The <texttt text="_service"/> is a CPtr to a capability of the wrong type.
+                </description>
+            </error>
+            <error name="seL4_InvalidArgument">
+                <description>
+                    The <texttt text="size_bits"/> is too big or too small for the requested object type.
+                    Or, <texttt text="type"/> cannot be created from a device untyped <docref>(see <autoref label="sec:kernmemalloc"/>)</docref>.
+                    Or, the requested object <texttt text="type"/> does not exist.
+                </description>
+            </error>
+            <error name="seL4_InvalidCapability">
+                <description>
+                    The <texttt text="_service"/> is a CPtr to a capability of the wrong type.
+                </description>
+            </error>
+            <error name="seL4_NotEnoughMemory" description="The total size of the new objects exceeds the space available."/>
+            <error name="seL4_RangeError">
+                <description>
+                    The <texttt text="num_objects"/> do not fit in the destination CNode at <texttt text="node_offset"/>.
+                    Or, <texttt text="num_objects"/> is greater than <texttt text="CONFIG_RETYPE_FAN_OUT_LIMIT"/>.
+                    Or, <texttt text="size_bits"/> is too large.
+                </description>
+            </error>
+        </method>
+
+    </interface>
+
     <interface name="seL4_TCB" manual_name="TCB" cap_description="Capability to the TCB which is being operated on.">
 
         <method id="TCBReadRegisters" name="ReadRegisters" manual_name="Read Registers" manual_label="tcb_readregisters">
