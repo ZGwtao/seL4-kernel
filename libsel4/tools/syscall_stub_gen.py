@@ -594,7 +594,8 @@ def generate_result_struct(interface_name, method_name, output_params):
     return "\n".join(result)
 
 
-def generate_stub(arch, wordsize, interface_name, method_name, method_id, input_params, output_params, structs, use_only_ipc_buffer, comment, mcs):
+def generate_stub(arch, wordsize, interface_name, method_name, method_id,
+                  input_params, output_params, dummy_input_params, structs, use_only_ipc_buffer, comment, mcs):
     result = []
 
     if use_only_ipc_buffer:
@@ -660,7 +661,7 @@ def generate_stub(arch, wordsize, interface_name, method_name, method_id, input_
     #
     result.append("\t%s result;" % return_type)
     result.append("\tseL4_MessageInfo_t tag = seL4_MessageInfo_new(%s, 0, %d, %d);" %
-                  (method_id, len(cap_expressions), len(input_expressions)))
+                  (method_id, len(cap_expressions), len(input_expressions) + len(dummy_input_params)))
     result.append("\tseL4_MessageInfo_t output_tag;")
     for i in range(num_mrs):
         result.append("\tseL4_Word mr%d;" % i)
@@ -696,6 +697,9 @@ def generate_stub(arch, wordsize, interface_name, method_name, method_id, input_
         # Initialise buffered parameters
         for i in range(num_mrs, len(input_expressions)):
             result.append("\tseL4_SetMR(%d, %s);" % (i, input_expressions[i]))
+        if len(dummy_input_params):
+            for i in range(len(input_expressions), len(input_expressions) + len(dummy_input_params)):
+                result.append("\tseL4_SetMR(%d, 0);" % (i))
         result.append("")
 
     #
@@ -901,6 +905,7 @@ def parse_xml_file(input_file, valid_types):
                     cap_description += append_description
 
             comment_lines.append("@param[in] _service %s" % cap_description)
+            dummy_input_params = []
             output_params = []
             for param in method.getElementsByTagName("param"):
                 param_name = param.getAttribute("name")
@@ -908,9 +913,11 @@ def parse_xml_file(input_file, valid_types):
                 if not param_type:
                     raise Exception("Unknown type '%s'." % (param.getAttribute("type")))
                 param_dir = param.getAttribute("dir")
-                assert (param_dir == "in") or (param_dir == "out")
+                assert (param_dir == "in") or (param_dir == "out") or (param_dir == "din")
                 if param_dir == "in":
                     input_params.append(Parameter(param_name, param_type))
+                elif param_dir == "din":
+                    dummy_input_params.append(Parameter(param_name, param_type))
                 else:
                     output_params.append(Parameter(param_name, param_type))
 
@@ -955,7 +962,7 @@ def parse_xml_file(input_file, valid_types):
             comment = "\n".join(["/**"] + [" * %s" % l for l in comment_lines] + [" */"])
 
             methods.append((interface_name, method_name, method_id, input_params,
-                            output_params, method_condition, comment))
+                            output_params, dummy_input_params, method_condition, comment))
 
     return (methods, structs, api)
 
@@ -1022,7 +1029,7 @@ def generate_stub_file(arch, wordsize, input_files, output_file, use_only_ipc_bu
     result.append("/*")
     result.append(" * Return types for generated methods.")
     result.append(" */")
-    for (interface_name, method_name, _, _, output_params, _, _) in methods:
+    for (interface_name, method_name, _, _, output_params, _, _, _) in methods:
         results_structure = generate_result_struct(interface_name, method_name, output_params)
         if results_structure:
             result.append(results_structure)
@@ -1033,11 +1040,11 @@ def generate_stub_file(arch, wordsize, input_files, output_file, use_only_ipc_bu
     result.append("/*")
     result.append(" * Generated stubs.")
     result.append(" */")
-    for (interface_name, method_name, method_id, inputs, outputs, condition, comment) in methods:
+    for (interface_name, method_name, method_id, inputs, outputs, dummy_inputs, condition, comment) in methods:
         if condition != "":
             result.append("#if %s" % condition)
         result.append(generate_stub(arch, wordsize, interface_name, method_name,
-                                    method_id, inputs, outputs, structs, use_only_ipc_buffer, comment, mcs))
+                                    method_id, inputs, outputs, dummy_inputs, structs, use_only_ipc_buffer, comment, mcs))
         if condition != "":
             result.append("#endif")
 

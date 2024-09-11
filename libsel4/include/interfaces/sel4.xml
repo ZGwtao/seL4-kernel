@@ -48,6 +48,8 @@
                 description="Number of slots into the node at which capabilities start being placed."/>
             <param dir="in" name="num_objects" type="seL4_Word"
                 description="Number of capabilities to create."/>
+            <param dir="din" name="core_affinity" type="seL4_Word"
+                description="CPU affinity for objects to bind."/>
             <error name="seL4_DeleteFirst" description="A capability exists in the destination window of the CNode."/>
             <error name="seL4_FailedLookup">
                 <description>
