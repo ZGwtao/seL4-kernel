@@ -43,8 +43,13 @@ exception_t decodeUntypedInvocation(word_t invLabel, word_t length, cte_t *slot,
     bool_t deviceMemory;
     bool_t reset;
 
+#ifdef CONFIG_CORE_TAGGED_OBJECT
+    if (invLabel != UntypedRetype &&
+        invLabel != UntypedRetypeCoreTagged) {
+#else
     /* Ensure operation is valid. */
     if (invLabel != UntypedRetype) {
+#endif
         userError("Untyped cap: Illegal operation attempted.");
         NODE_STATE(ksCurSyscallError).type = seL4_IllegalOperation;
         return EXCEPTION_SYSCALL_ERROR;
