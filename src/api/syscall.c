@@ -464,6 +464,18 @@ static void handleRecv(bool_t isBlocking)
                 reply_cap = lu_ret.cap;
             }
         }
+#ifdef CONFIG_CORE_TAGGED_OBJECT
+        if (cap_endpoint_cap_get_capCanTag(ep_cap)) {
+            exception_t exc;
+            exc = receiveCoreLocalIPC(NODE_STATE(ksCurThread),
+                                      ep_cap, isBlocking, reply_cap);
+	    // TODO
+	    if (exc != EXCEPTION_NONE)
+                assert(0);
+
+            break;
+        }
+#endif
         receiveIPC(NODE_STATE(ksCurThread), ep_cap, isBlocking, reply_cap);
 #else
         deleteCallerCap(NODE_STATE(ksCurThread));

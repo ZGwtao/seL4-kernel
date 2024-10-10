@@ -712,11 +712,7 @@ exception_t decodeInvocation(word_t invLabel, word_t length,
             NODE_STATE(ksCurSyscallError).invalidCapNumber = 0;
             return EXCEPTION_SYSCALL_ERROR;
         }
-#ifdef CONFIG_CORE_TAGGED_OBJECT
-        //if (unlikely(cap_endpoint_cap_get_capCanTag(cap) &&
-        //             NODE_STATE(ksCurThread)->tcbAffinity != )) {
-        //}
-#endif
+
         setThreadState(NODE_STATE(ksCurThread), ThreadState_Restart);
 #ifdef CONFIG_KERNEL_MCS
 #ifdef CONFIG_CORE_TAGGED_OBJECT
@@ -853,8 +849,18 @@ exception_t decodeInvocation(word_t invLabel, word_t length,
 exception_t performInvocation_Endpoint(endpoint_t *ep, word_t badge, bool_t canGrant, bool_t canGrantReply,
                                        bool_t block, bool_t call, bool_t canDonate, bool_t canTag)
 {
-    sendIPC(block, call, badge, canGrant, canGrantReply, canDonate, NODE_STATE(ksCurThread), ep);
-    return EXCEPTION_NONE;
+    exception_t exc;
+    exc = EXCEPTION_NONE;
+
+    if (canTag) {
+        /* Cases when core affinity of the scheduling context of current thread
+         * mismatches with the tagged core of target endpoint */
+        exc = sendCoreLocalIPC(block, call, badge, canGrant,
+                               canGrantReply, canDonate, NODE_STATE(ksCurThread), ep);
+    } else {
+        sendIPC(block, call, badge, canGrant, canGrantReply, canDonate, NODE_STATE(ksCurThread), ep);
+    }
+    return exc;
 }
 #else
 exception_t performInvocation_Endpoint(endpoint_t *ep, word_t badge,

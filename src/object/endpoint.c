@@ -70,10 +70,7 @@ void sendIPC(bool_t blocking, bool_t do_call, word_t badge,
         /* Get the head of the endpoint queue. */
         queue = ep_ptr_get_queue(epptr);
         dest = queue.head;
-#ifdef CONFIG_CORE_TAGGED_OBJECT
-        //if (!canTag) {
-        //}
-#endif
+
         /* Haskell error "Receive endpoint queue must not be empty" */
         assert(dest);
 
@@ -154,6 +151,133 @@ void sendIPC(bool_t blocking, bool_t do_call, word_t badge,
     ep_lock_release(epptr);
 #endif
 }
+
+#ifdef CONFIG_KERNEL_MCS
+#ifdef CONFIG_CORE_TAGGED_OBJECT
+exception_t sendCoreLocalIPC(bool_t blocking, bool_t do_call, word_t badge,
+                             bool_t canGrant, bool_t canGrantReply, bool_t canDonate, tcb_t *thread, endpoint_t *epptr)
+{
+    // threads with different SC are not allowed to call on the endpoint with tagged,
+    // so there should not be any remote thread can reach here (endpoint is exclusive)
+    /* ep_lock_acquire(epptr); */
+
+    if (coreCheckPreIPC(thread, epptr)) {
+        // TODO
+        assert(0);
+    }
+
+    switch (endpoint_ptr_get_state(epptr)) {
+    case EPState_Idle:
+    case EPState_Send:
+        if (blocking) {
+            tcb_queue_t queue;
+
+            /* Set thread state to BlockedOnSend */
+            thread_state_ptr_set_tsType(&thread->tcbState,
+                                        ThreadState_BlockedOnSend);
+            thread_state_ptr_set_blockingObject(
+                &thread->tcbState, EP_REF(epptr));
+            thread_state_ptr_set_blockingIPCBadge(
+                &thread->tcbState, badge);
+            thread_state_ptr_set_blockingIPCCanGrant(
+                &thread->tcbState, canGrant);
+            thread_state_ptr_set_blockingIPCCanGrantReply(
+                &thread->tcbState, canGrantReply);
+            thread_state_ptr_set_blockingIPCIsCall(
+                &thread->tcbState, do_call);
+
+#ifdef CONFIG_FINE_GRAINED_LOCKING
+            scheduler_lock_acquire(thread->tcbAffinity);
+#endif
+            /* Scheduler should be locked because it's not exclusive */
+            scheduleTCB(thread);
+#ifdef CONFIG_FINE_GRAINED_LOCKING
+            scheduler_lock_release(thread->tcbAffinity);
+#endif
+
+            /* Place calling thread in endpoint queue */
+            queue = ep_ptr_get_queue(epptr);
+            queue = tcbEPAppend(thread, queue);
+            endpoint_ptr_set_state(epptr, EPState_Send);
+            ep_ptr_set_queue(epptr, queue);
+        }
+        break;
+
+    case EPState_Recv: {
+        tcb_queue_t queue;
+        tcb_t *dest;
+
+        /* Get the head of the endpoint queue. */
+        queue = ep_ptr_get_queue(epptr);
+        dest = queue.head;
+
+        /* Haskell error "Receive endpoint queue must not be empty" */
+        assert(dest);
+
+        /* Dequeue the first TCB */
+        queue = tcbEPDequeue(dest, queue);
+        ep_ptr_set_queue(epptr, queue);
+
+        if (!queue.head) {
+            endpoint_ptr_set_state(epptr, EPState_Idle);
+        }
+
+        /* Do the transfer */
+        doIPCTransfer(thread, epptr, badge, canGrant, dest);
+
+        reply_t *reply = REPLY_PTR(thread_state_get_replyObject(dest->tcbState));
+        if (reply) {
+            // exlusive so no reply lock is required
+            /* reply_object_lock_acquire(reply, "sendIPC"); */
+            reply_unlink(reply, dest);
+        }
+
+        if (do_call ||
+            seL4_Fault_ptr_get_seL4_FaultType(&thread->tcbFault) != seL4_Fault_NullFault) {
+            if (reply != NULL && (canGrant || canGrantReply)) {
+                reply_push(thread, dest, reply, canDonate);
+            } else {
+                setThreadState(thread, ThreadState_Inactive);
+            }
+        } else if (canDonate && dest->tcbSchedContext == NULL) {
+#ifdef CONFIG_FINE_GRAINED_LOCKING
+            scheduler_lock_acquire(thread->tcbAffinity);
+#endif
+            schedContext_donate(thread->tcbSchedContext, dest);
+#ifdef CONFIG_FINE_GRAINED_LOCKING
+            scheduler_lock_release(thread->tcbAffinity);
+#endif
+        }
+
+        /* blocked threads should have enough budget to get out of the kernel */
+        assert(dest->tcbSchedContext == NULL || refill_sufficient(dest->tcbSchedContext, 0));
+        assert(dest->tcbSchedContext == NULL || refill_ready(dest->tcbSchedContext));
+        setThreadState(dest, ThreadState_Running);
+        if (sc_sporadic(dest->tcbSchedContext) && dest->tcbSchedContext != NODE_STATE(ksCurSC)) {
+            refill_unblock_check(dest->tcbSchedContext);
+        }
+#ifdef CONFIG_FINE_GRAINED_LOCKING
+        scheduler_lock_acquire(dest->tcbAffinity);
+#endif
+        possibleSwitchTo(dest);
+#ifdef CONFIG_FINE_GRAINED_LOCKING
+        scheduler_lock_release(dest->tcbAffinity);
+#endif
+        // exclusive reply object, no lock required
+        /*
+        if (reply) {
+            reply_object_lock_release(reply, "sendIPC");
+        } */
+        break;
+    }
+    }
+    // exclusive endpoint object
+    /* ep_lock_release(epptr); */
+
+    return EXCEPTION_NONE;
+}
+#endif /* CONFIG_CORE_TAGGED_OBJECT */
+#endif /* CONFIG_KERNEL_MCS */
 
 #ifdef CONFIG_KERNEL_MCS
 void receiveIPC(tcb_t *thread, cap_t cap, bool_t isBlocking, cap_t replyCap)
@@ -358,6 +482,216 @@ void receiveIPC(tcb_t *thread, cap_t cap, bool_t isBlocking)
     }
 #endif
 }
+
+#ifdef CONFIG_KERNEL_MCS
+#ifdef CONFIG_CORE_TAGGED_OBJECT
+exception_t receiveCoreLocalIPC(tcb_t *thread, cap_t cap, bool_t isBlocking, cap_t replyCap)
+{
+    endpoint_t *epptr;
+    notification_t *ntfnPtr;
+
+    /* Haskell error "receiveIPC: invalid cap" */
+    assert(cap_get_capType(cap) == cap_endpoint_cap);
+
+    epptr = EP_PTR(cap_endpoint_cap_get_capEPPtr(cap));
+
+    if (coreCheckPreIPC(thread, epptr)) {
+        // TODO
+        assert(0);
+    }
+
+    reply_t *replyPtr = NULL;
+    if (cap_get_capType(replyCap) == cap_reply_cap) {
+        replyPtr = REPLY_PTR(cap_reply_cap_get_capReplyPtr(replyCap));
+#ifdef CONFIG_FINE_GRAINED_LOCKING
+        reply_object_lock_acquire(replyPtr, "receiveIPC");
+#endif
+        if (unlikely(replyPtr->replyTCB != NULL && replyPtr->replyTCB != thread)) {
+            userError("Reply object already has unexecuted reply!");
+            cancelIPC(replyPtr->replyTCB);
+        }
+    }
+
+    /* Check for anything waiting in the notification */
+    ntfnPtr = thread->tcbBoundNotification;
+#ifdef CONFIG_FINE_GRAINED_LOCKING
+    if (ntfnPtr) {
+        ntfn_lock_acquire(ntfnPtr);
+    }
+#endif
+    if (ntfnPtr && notification_ptr_get_state(ntfnPtr) == NtfnState_Active) {
+        completeSignal(ntfnPtr, thread);
+#ifdef CONFIG_FINE_GRAINED_LOCKING
+        ntfn_lock_release(ntfnPtr);
+#endif
+    } else {
+        /* If this is a blocking recv and we didn't have a pending notification,
+         * then if we are running on an SC from a bound notification, then we
+         * need to return it so that we can passively wait on the EP for potentially
+         * SC donations from client threads.
+         */
+        if (ntfnPtr && isBlocking) {
+#ifdef CONFIG_FINE_GRAINED_LOCKING
+            scheduler_lock_acquire(getCurrentCPUIndex());
+#endif
+            maybeReturnSchedContext(ntfnPtr, thread);
+#ifdef CONFIG_FINE_GRAINED_LOCKING
+            scheduler_lock_release(getCurrentCPUIndex());
+#endif
+        }
+#ifdef CONFIG_FINE_GRAINED_LOCKING
+        if (ntfnPtr) {
+            ntfn_lock_release(ntfnPtr);
+        }
+	// XXX
+        /* ep_lock_acquire(epptr); */
+#endif
+        switch (endpoint_ptr_get_state(epptr)) {
+        case EPState_Idle:
+        case EPState_Recv: {
+            tcb_queue_t queue;
+
+            if (isBlocking) {
+                /* Set thread state to BlockedOnReceive */
+                thread_state_ptr_set_tsType(&thread->tcbState,
+                                            ThreadState_BlockedOnReceive);
+                thread_state_ptr_set_blockingObject(
+                    &thread->tcbState, EP_REF(epptr));
+
+                thread_state_ptr_set_replyObject(&thread->tcbState, REPLY_REF(replyPtr));
+                if (replyPtr) {
+                    replyPtr->replyTCB = thread;
+                }
+#ifdef CONFIG_FINE_GRAINED_LOCKING
+                scheduler_lock_acquire(thread->tcbAffinity);
+#endif
+                scheduleTCB(thread);
+#ifdef CONFIG_FINE_GRAINED_LOCKING
+                scheduler_lock_release(thread->tcbAffinity);
+#endif
+
+                /* Place calling thread in endpoint queue */
+                queue = ep_ptr_get_queue(epptr);
+                queue = tcbEPAppend(thread, queue);
+                endpoint_ptr_set_state(epptr, EPState_Recv);
+                ep_ptr_set_queue(epptr, queue);
+            } else {
+                doNBRecvFailedTransfer(thread);
+            }
+            break;
+        }
+
+        case EPState_Send: {
+            tcb_queue_t queue;
+            tcb_t *sender;
+            word_t badge;
+            bool_t canGrant;
+            bool_t canGrantReply;
+            bool_t do_call;
+
+            /* Get the head of the endpoint queue. */
+            queue = ep_ptr_get_queue(epptr);
+            sender = queue.head;
+
+            /* Haskell error "Send endpoint queue must not be empty" */
+            assert(sender);
+
+            /* Dequeue the first TCB */
+            queue = tcbEPDequeue(sender, queue);
+            ep_ptr_set_queue(epptr, queue);
+
+            if (!queue.head) {
+                endpoint_ptr_set_state(epptr, EPState_Idle);
+            }
+
+            /* Get sender IPC details */
+            badge = thread_state_ptr_get_blockingIPCBadge(&sender->tcbState);
+            canGrant =
+                thread_state_ptr_get_blockingIPCCanGrant(&sender->tcbState);
+            canGrantReply =
+                thread_state_ptr_get_blockingIPCCanGrantReply(&sender->tcbState);
+
+            /* Do the transfer */
+            doIPCTransfer(sender, epptr, badge,
+                          canGrant, thread);
+
+            do_call = thread_state_ptr_get_blockingIPCIsCall(&sender->tcbState);
+
+            if (sc_sporadic(sender->tcbSchedContext)) {
+                /* We know that the sender can't have the current SC as
+                 * its own SC as this point as it should still be
+                 * associated with the current thread, no thread, or a
+                 * thread that isn't blocked. This check is added here
+                 * to reduce the cost of proving this to be true as a
+                 * short-term stop-gap. */
+                assert(sender->tcbSchedContext != NODE_STATE(ksCurSC));
+                if (sender->tcbSchedContext != NODE_STATE(ksCurSC)) {
+                    refill_unblock_check(sender->tcbSchedContext);
+                }
+            }
+
+            if (do_call ||
+                seL4_Fault_get_seL4_FaultType(sender->tcbFault) != seL4_Fault_NullFault) {
+                if ((canGrant || canGrantReply) && replyPtr != NULL) {
+                    bool_t canDonate = sender->tcbSchedContext != NULL
+                                       && seL4_Fault_get_seL4_FaultType(sender->tcbFault) != seL4_Fault_Timeout;
+#ifdef CONFIG_FINE_GRAINED_LOCKING
+                    scheduler_lock_acquire(sender->tcbAffinity);
+#endif
+                    reply_push(sender, thread, replyPtr, canDonate);
+#ifdef CONFIG_FINE_GRAINED_LOCKING
+                    scheduler_lock_release(sender->tcbAffinity);
+#endif
+                } else {
+                    setThreadState(sender, ThreadState_Inactive);
+                }
+            } else {
+                setThreadState(sender, ThreadState_Running);
+#ifdef CONFIG_FINE_GRAINED_LOCKING
+                scheduler_lock_acquire(sender->tcbAffinity);
+#endif
+                possibleSwitchTo(sender);
+#ifdef CONFIG_FINE_GRAINED_LOCKING
+                scheduler_lock_release(sender->tcbAffinity);
+#endif
+                assert(sender->tcbSchedContext == NULL || refill_sufficient(sender->tcbSchedContext, 0));
+            }
+            break;
+        }
+        }
+	// XXX
+        /* ep_lock_release(epptr); */
+    }
+#ifdef CONFIG_FINE_GRAINED_LOCKING
+    if (replyPtr) {
+        reply_object_lock_release(replyPtr, "receiveIPC");
+    }
+#endif
+
+    return EXCEPTION_NONE;
+}
+#endif
+#endif
+
+#ifdef CONFIG_KERNEL_MCS
+#ifdef CONFIG_CORE_TAGGED_OBJECT
+bool_t coreCheckPreIPC(tcb_t *thread, endpoint_t *epptr)
+{
+    word_t epCore;
+    word_t tcbCore;
+
+    epCore = endpoint_ptr_get_core(epptr);
+
+    assert(epCore >= 0);
+    assert(epCore < CONFIG_MAX_NUM_NODES);
+
+    tcbCore = thread->tcbAffinity;
+
+    /* prevent mismatch */
+    return tcbCore == epCore ? true : false;
+}
+#endif
+#endif
 
 void replyFromKernel_error(tcb_t *thread)
 {
