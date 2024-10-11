@@ -27,12 +27,14 @@ static inline void ep_ptr_set_queue(endpoint_t *epptr, tcb_queue_t queue)
 }
 
 #ifdef CONFIG_KERNEL_MCS
+#ifdef CONFIG_CORE_TAGGED_OBJECT
 bool_t coreCheckPreIPC(tcb_t *thread, endpoint_t *epptr);
 /* stripped-down version for core-tagged endpoint */
 exception_t sendCoreLocalIPC(bool_t blocking, bool_t do_call, word_t badge,
                              bool_t canGrant, bool_t canGrantReply, bool_t canDonate,
                              tcb_t *thread, endpoint_t *epptr);
 exception_t receiveCoreLocalIPC(tcb_t *thread, cap_t cap, bool_t isBlocking, cap_t replyCap);
+#endif
 /* normal IPC handling function for untagged endpoint */
 void sendIPC(bool_t blocking, bool_t do_call, word_t badge,
              bool_t canGrant, bool_t canGrantReply, bool_t canDonate, tcb_t *thread,

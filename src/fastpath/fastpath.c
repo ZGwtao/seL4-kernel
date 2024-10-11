@@ -62,7 +62,16 @@ void NORETURN fastpath_call(word_t cptr, word_t msgInfo)
 
     /* Get the endpoint address */
     ep_ptr = EP_PTR(cap_endpoint_cap_get_capEPPtr(ep_cap));
+#ifdef CONFIG_CORE_TAGGED_OBJECT
+#ifdef ENABLE_SMP_SUPPORT
+    if (unlikely(!coreCheckPreIPC(NODE_STATE(ksCurThread), ep_ptr))) {
+        userError("Send to a core-tagged endpoint with mismatched core affinity!");
+        fail("core mismatch");
+    }
+#endif
+#else
     ep_lock_acquire(ep_ptr);
+#endif
 
     /* Get the destination thread, which is only going to be valid
      * if the endpoint is valid. */
@@ -70,14 +79,18 @@ void NORETURN fastpath_call(word_t cptr, word_t msgInfo)
 
     /* Check that there's a thread waiting to receive */
     if (unlikely(endpoint_ptr_get_state(ep_ptr) != EPState_Recv)) {
+#ifndef CONFIG_CORE_TAGGED_OBJECT
         ep_lock_release(ep_ptr);
+#endif
         slowpath(SysCall);
     }
 
     /* ensure we are not single stepping the destination in ia32 */
 #if defined(CONFIG_HARDWARE_DEBUG_API) && defined(CONFIG_ARCH_IA32)
     if (unlikely(dest->tcbArch.tcbContext.breakpointState.single_step_enabled)) {
+#ifndef CONFIG_CORE_TAGGED_OBJECT
         ep_lock_release(ep_ptr);
+#endif
         slowpath(SysCall);
     }
 #endif
@@ -90,7 +103,9 @@ void NORETURN fastpath_call(word_t cptr, word_t msgInfo)
 
     /* Ensure that the destination has a valid VTable. */
     if (unlikely(! isValidVTableRoot_fp(newVTable))) {
+#ifndef CONFIG_CORE_TAGGED_OBJECT
         ep_lock_release(ep_ptr);
+#endif
         slowpath(SysCall);
     }
 
@@ -114,13 +129,17 @@ void NORETURN fastpath_call(word_t cptr, word_t msgInfo)
     asid_map_t asid_map = findMapForASID(asid);
     if (unlikely(asid_map_get_type(asid_map) != asid_map_asid_map_vspace ||
                  VSPACE_PTR(asid_map_asid_map_vspace_get_vspace_root(asid_map)) != cap_pd)) {
+#ifndef CONFIG_CORE_TAGGED_OBJECT
         ep_lock_release(ep_ptr);
+#endif
         slowpath(SysCall);
     }
 #ifdef CONFIG_ARM_HYPERVISOR_SUPPORT
     /* Ensure the vmid is valid. */
     if (unlikely(!asid_map_asid_map_vspace_get_stored_vmid_valid(asid_map))) {
+#ifndef CONFIG_CORE_TAGGED_OBJECT
         ep_lock_release(ep_ptr);
+#endif
         slowpath(SysCall);
     }
     /* vmids are the tags used instead of hw_asids in hyp mode */
@@ -140,7 +159,9 @@ void NORETURN fastpath_call(word_t cptr, word_t msgInfo)
     /* ensure only the idle thread or lower prio threads are present in the scheduler */
     if (unlikely(dest->tcbPriority < NODE_STATE(ksCurThread->tcbPriority) &&
                  !isHighestPrio(dom, dest->tcbPriority))) {
+#ifndef CONFIG_CORE_TAGGED_OBJECT
         ep_lock_release(ep_ptr);
+#endif
         slowpath(SysCall);
     }
 
@@ -148,32 +169,42 @@ void NORETURN fastpath_call(word_t cptr, word_t msgInfo)
      * create the reply cap */
     if (unlikely(!cap_endpoint_cap_get_capCanGrant(ep_cap) &&
                  !cap_endpoint_cap_get_capCanGrantReply(ep_cap))) {
+#ifndef CONFIG_CORE_TAGGED_OBJECT
         ep_lock_release(ep_ptr);
+#endif
         slowpath(SysCall);
     }
 
 #ifdef CONFIG_ARCH_AARCH32
     if (unlikely(!pde_pde_invalid_get_stored_asid_valid(stored_hw_asid))) {
+#ifndef CONFIG_CORE_TAGGED_OBJECT
         ep_lock_release(ep_ptr);
+#endif
         slowpath(SysCall);
     }
 #endif
 
     /* Ensure the original caller is in the current domain and can be scheduled directly. */
     if (unlikely(dest->tcbDomain != ksCurDomain && 0 < maxDom)) {
+#ifndef CONFIG_CORE_TAGGED_OBJECT
         ep_lock_release(ep_ptr);
+#endif
         slowpath(SysCall);
     }
 
 #ifdef CONFIG_KERNEL_MCS
     if (unlikely(dest->tcbSchedContext != NULL)) {
+#ifndef CONFIG_CORE_TAGGED_OBJECT
         ep_lock_release(ep_ptr);
+#endif
         slowpath(SysCall);
     }
 
     reply_t *reply = thread_state_get_replyObject_np(dest->tcbState);
     if (unlikely(reply == NULL)) {
+#ifndef CONFIG_CORE_TAGGED_OBJECT
         ep_lock_release(ep_ptr);
+#endif
         slowpath(SysCall);
     }
 #endif
@@ -181,7 +212,9 @@ void NORETURN fastpath_call(word_t cptr, word_t msgInfo)
 #ifdef ENABLE_SMP_SUPPORT
     /* Ensure both threads have the same affinity */
     if (unlikely(NODE_STATE(ksCurThread)->tcbAffinity != dest->tcbAffinity)) {
+#ifndef CONFIG_CORE_TAGGED_OBJECT
         ep_lock_release(ep_ptr);
+#endif
         slowpath(SysCall);
     }
 #endif /* ENABLE_SMP_SUPPORT */
@@ -203,7 +236,9 @@ void NORETURN fastpath_call(word_t cptr, word_t msgInfo)
     } else {
         endpoint_ptr_mset_epQueue_tail_state(ep_ptr, 0, EPState_Idle);
     }
+#ifndef CONFIG_CORE_TAGGED_OBJECT
     ep_lock_release(ep_ptr);
+#endif
 
     badge = cap_endpoint_cap_get_capEPBadge(ep_cap);
 
@@ -293,8 +328,6 @@ void NORETURN fastpath_reply_recv(word_t cptr, word_t msgInfo)
         slowpath(SysReplyRecv);
     }
 
-
-
 #ifdef CONFIG_KERNEL_MCS
     /* lookup the reply object */
     cap_t reply_cap = lookup_fp(TCB_PTR_CTE_PTR(NODE_STATE(ksCurThread), tcbCTable)->cap, reply);
@@ -357,11 +390,23 @@ void NORETURN fastpath_reply_recv(word_t cptr, word_t msgInfo)
 
     /* Get the endpoint address */
     ep_ptr = EP_PTR(cap_endpoint_cap_get_capEPPtr(ep_cap));
+#ifdef CONFIG_CORE_TAGGED_OBJECT
+#ifdef ENABLE_SMP_SUPPORT
+    if (unlikely(!coreCheckPreIPC(NODE_STATE(ksCurThread), ep_ptr))) {
+        reply_object_lock_release(reply_ptr, "fastpath");
+        userError("Receive on a core-tagged endpoint with mismatched core affinity!");
+        fail("core mismatch");
+    }
+#endif
+#else
     ep_lock_acquire(ep_ptr);
+#endif
 
     /* Check that there's not a thread waiting to send */
     if (unlikely(endpoint_ptr_get_state(ep_ptr) == EPState_Send)) {
+#ifndef CONFIG_CORE_TAGGED_OBJECT
         ep_lock_release(ep_ptr);
+#endif
         reply_object_lock_release(reply_ptr, "fastpath");
         slowpath(SysReplyRecv);
     }
@@ -369,7 +414,9 @@ void NORETURN fastpath_reply_recv(word_t cptr, word_t msgInfo)
     /* ensure we are not single stepping the caller in ia32 */
 #if defined(CONFIG_HARDWARE_DEBUG_API) && defined(CONFIG_ARCH_IA32)
     if (unlikely(caller->tcbArch.tcbContext.breakpointState.single_step_enabled)) {
+#ifndef CONFIG_CORE_TAGGED_OBJECT
         ep_lock_release(ep_ptr);
+#endif
         reply_object_lock_release(reply_ptr, "fastpath");
         slowpath(SysReplyRecv);
     }
@@ -382,7 +429,9 @@ void NORETURN fastpath_reply_recv(word_t cptr, word_t msgInfo)
     /* Change this as more types of faults are supported */
 #ifndef CONFIG_EXCEPTION_FASTPATH
     if (unlikely(fault_type != seL4_Fault_NullFault)) {
+#ifndef CONFIG_CORE_TAGGED_OBJECT
         ep_lock_release(ep_ptr);
+#endif
         reply_object_lock_release(reply_ptr, "fastpath");
         slowpath(SysReplyRecv);
     }
@@ -400,7 +449,9 @@ void NORETURN fastpath_reply_recv(word_t cptr, word_t msgInfo)
 
     /* Ensure that the destination has a valid MMU. */
     if (unlikely(! isValidVTableRoot_fp(newVTable))) {
+#ifndef CONFIG_CORE_TAGGED_OBJECT
         ep_lock_release(ep_ptr);
+#endif
         reply_object_lock_release(reply_ptr, "fastpath");
         slowpath(SysReplyRecv);
     }
@@ -423,14 +474,18 @@ void NORETURN fastpath_reply_recv(word_t cptr, word_t msgInfo)
     asid_map_t asid_map = findMapForASID(asid);
     if (unlikely(asid_map_get_type(asid_map) != asid_map_asid_map_vspace ||
                  VSPACE_PTR(asid_map_asid_map_vspace_get_vspace_root(asid_map)) != cap_pd)) {
+#ifndef CONFIG_CORE_TAGGED_OBJECT
         ep_lock_release(ep_ptr);
+#endif
         reply_object_lock_release(reply_ptr, "fastpath");
         slowpath(SysReplyRecv);
     }
 #ifdef CONFIG_ARM_HYPERVISOR_SUPPORT
     /* Ensure the vmid is valid. */
     if (unlikely(!asid_map_asid_map_vspace_get_stored_vmid_valid(asid_map))) {
+#ifndef CONFIG_CORE_TAGGED_OBJECT
         ep_lock_release(ep_ptr);
+#endif
         reply_object_lock_release(reply_ptr, "fastpath");
         slowpath(SysReplyRecv);
     }
@@ -449,7 +504,9 @@ void NORETURN fastpath_reply_recv(word_t cptr, word_t msgInfo)
     /* Ensure the original caller can be scheduled directly. */
     dom = maxDom ? ksCurDomain : 0;
     if (unlikely(!isHighestPrio(dom, caller->tcbPriority))) {
+#ifndef CONFIG_CORE_TAGGED_OBJECT
         ep_lock_release(ep_ptr);
+#endif
         reply_object_lock_release(reply_ptr, "fastpath");
         slowpath(SysReplyRecv);
     }
@@ -457,7 +514,9 @@ void NORETURN fastpath_reply_recv(word_t cptr, word_t msgInfo)
 #ifdef CONFIG_ARCH_AARCH32
     /* Ensure the HWASID is valid. */
     if (unlikely(!pde_pde_invalid_get_stored_asid_valid(stored_hw_asid))) {
+#ifndef CONFIG_CORE_TAGGED_OBJECT
         ep_lock_release(ep_ptr);
+#endif
         reply_object_lock_release(reply_ptr, "fastpath");
         slowpath(SysReplyRecv);
     }
@@ -465,14 +524,18 @@ void NORETURN fastpath_reply_recv(word_t cptr, word_t msgInfo)
 
     /* Ensure the original caller is in the current domain and can be scheduled directly. */
     if (unlikely(caller->tcbDomain != ksCurDomain && 0 < maxDom)) {
+#ifndef CONFIG_CORE_TAGGED_OBJECT
         ep_lock_release(ep_ptr);
+#endif
         reply_object_lock_release(reply_ptr, "fastpath");
         slowpath(SysReplyRecv);
     }
 
 #ifdef CONFIG_KERNEL_MCS
     if (unlikely(caller->tcbSchedContext != NULL)) {
+#ifndef CONFIG_CORE_TAGGED_OBJECT
         ep_lock_release(ep_ptr);
+#endif
         reply_object_lock_release(reply_ptr, "fastpath");
         slowpath(SysReplyRecv);
     }
@@ -481,7 +544,9 @@ void NORETURN fastpath_reply_recv(word_t cptr, word_t msgInfo)
 #ifdef ENABLE_SMP_SUPPORT
     /* Ensure both threads have the same affinity */
     if (unlikely(NODE_STATE(ksCurThread)->tcbAffinity != caller->tcbAffinity)) {
+#ifndef CONFIG_CORE_TAGGED_OBJECT
         ep_lock_release(ep_ptr);
+#endif
         reply_object_lock_release(reply_ptr, "fastpath");
         slowpath(SysReplyRecv);
     }
@@ -543,7 +608,9 @@ void NORETURN fastpath_reply_recv(word_t cptr, word_t msgInfo)
                                              EPState_Recv);
 #endif
     }
+#ifndef CONFIG_CORE_TAGGED_OBJECT
     ep_lock_release(ep_ptr);
+#endif
 
 #ifdef CONFIG_KERNEL_MCS
     /* update call stack */

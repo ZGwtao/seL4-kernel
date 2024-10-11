@@ -161,9 +161,9 @@ exception_t sendCoreLocalIPC(bool_t blocking, bool_t do_call, word_t badge,
     // so there should not be any remote thread can reach here (endpoint is exclusive)
     /* ep_lock_acquire(epptr); */
 
-    if (coreCheckPreIPC(thread, epptr)) {
-        // TODO
-        assert(0);
+    if (unlikely(!coreCheckPreIPC(thread, epptr))) {
+        userError("Send to a core-tagged endpoint with mismatched core affinity!");
+        fail("core mismatch\n");
     }
 
     switch (endpoint_ptr_get_state(epptr)) {
@@ -495,10 +495,11 @@ exception_t receiveCoreLocalIPC(tcb_t *thread, cap_t cap, bool_t isBlocking, cap
 
     epptr = EP_PTR(cap_endpoint_cap_get_capEPPtr(cap));
 
-    if (coreCheckPreIPC(thread, epptr)) {
-        // TODO
-        assert(0);
+    if (unlikely(!coreCheckPreIPC(thread, epptr))) {
+        userError("Receive on a core-tagged endpoint with mismatched core affinity!");
+        fail("Core mismatch\n");
     }
+    // TODO update error handling for mismatch core
 
     reply_t *replyPtr = NULL;
     if (cap_get_capType(replyCap) == cap_reply_cap) {
