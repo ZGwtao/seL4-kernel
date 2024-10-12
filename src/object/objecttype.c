@@ -596,7 +596,7 @@ cap_t createObject(object_t t, void *regionBase, word_t userSize, bool_t deviceM
 
     case seL4_ReplyObject:
 #ifdef CONFIG_CORE_TAGGED_OBJECT
-        return cap_reply_cap_new(tagged, REPLY_REF(regionBase), true);
+        return cap_reply_cap_new(REPLY_REF(regionBase), true, tagged);
 #else
         /** AUXUPD: "(True, ptr_retyp (Ptr (ptr_val \<acute>regionBase) :: reply_C ptr))" */
         return cap_reply_cap_new(REPLY_REF(regionBase), true);
