@@ -771,10 +771,17 @@ exception_t decodeInvocation(word_t invLabel, word_t length,
 #ifdef CONFIG_KERNEL_MCS
     case cap_reply_cap:
         setThreadState(NODE_STATE(ksCurThread), ThreadState_Restart);
+#ifdef CONFIG_CORE_TAGGED_OBJECT
+        return performInvocation_Reply(
+                   NODE_STATE(ksCurThread), cap_reply_cap_get_capCanTag(cap),
+                   REPLY_PTR(cap_reply_cap_get_capReplyPtr(cap)),
+                   cap_reply_cap_get_capReplyCanGrant(cap));
+#else
         return performInvocation_Reply(
                    NODE_STATE(ksCurThread),
                    REPLY_PTR(cap_reply_cap_get_capReplyPtr(cap)),
                    cap_reply_cap_get_capReplyCanGrant(cap));
+#endif
 #else
     case cap_reply_cap:
         if (unlikely(cap_reply_cap_get_capReplyMaster(cap))) {
@@ -906,9 +913,19 @@ exception_t performInvocation_Notification(notification_t *ntfn, word_t badge)
 }
 
 #ifdef CONFIG_KERNEL_MCS
+#ifdef CONFIG_CORE_TAGGED_OBJECT
+exception_t performInvocation_Reply(tcb_t *thread, bool_t canTag, reply_t *reply, bool_t canGrant)
+{
+    if (canTag) {
+        doCoreLocalReplyTransfer(thread, reply, canGrant);
+    } else {
+        doReplyTransfer(thread, reply, canGrant);
+    }
+#else
 exception_t performInvocation_Reply(tcb_t *thread, reply_t *reply, bool_t canGrant)
 {
     doReplyTransfer(thread, reply, canGrant);
+#endif
     return EXCEPTION_NONE;
 }
 #else
