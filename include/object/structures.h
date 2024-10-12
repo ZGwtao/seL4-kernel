@@ -395,7 +395,7 @@ struct reply {
 
 #ifdef CONFIG_CORE_TAGGED_OBJECT
     /* Unused when SMP is not enabled (default set to zero) */
-    word_t tcbAffinity;
+    word_t coreAffinity;
 
     /* Unused, explicit padding to make struct size the correct power of 2. */
     word_t unused1;
