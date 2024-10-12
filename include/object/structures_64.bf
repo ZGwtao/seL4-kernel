@@ -95,7 +95,12 @@ block reply_cap {
 
     field capType 5
     field capReplyCanGrant 1
+#ifdef CONFIG_CORE_TAGGED_OBJECT
+    field capCanTag 1
+    padding 57
+#else
     padding 58
+#endif
 }
 
 block call_stack(callStackPtr, isHead) {

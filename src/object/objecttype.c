@@ -595,8 +595,12 @@ cap_t createObject(object_t t, void *regionBase, word_t userSize, bool_t deviceM
         return cap_sched_context_cap_new(SC_REF(regionBase), userSize);
 
     case seL4_ReplyObject:
+#ifdef CONFIG_CORE_TAGGED_OBJECT
+        return cap_reply_cap_new(tagged, REPLY_REF(regionBase), true);
+#else
         /** AUXUPD: "(True, ptr_retyp (Ptr (ptr_val \<acute>regionBase) :: reply_C ptr))" */
         return cap_reply_cap_new(REPLY_REF(regionBase), true);
+#endif
 #endif
 
     default:
@@ -608,6 +612,17 @@ cap_t createObject(object_t t, void *regionBase, word_t userSize, bool_t deviceM
 void performObjectCoreTagging(object_t t, cap_t cap, word_t coreIndex)
 {
     switch ((api_object_t)t) {
+    case seL4_ReplyObject: {
+        /* Once tagged, only one tagged reply object can be invoked on each core,
+         * so make it feasible to remove fine-grained locks on reply during IPC procedure. */
+        reply_t *reply;
+        reply = REPLY_PTR(cap_reply_cap_get_capReplyPtr(cap));
+
+	/* tcbAffinity -> reply object are not referred by generated interfaces */
+        reply->tcbAffinity = coreIndex;
+        break;
+    }
+
     case seL4_EndpointObject: {
         endpoint_t *epptr;
         epptr = (endpoint_t *)cap_endpoint_cap_get_capEPPtr(cap);

@@ -393,6 +393,16 @@ struct reply {
      * context was passed along the call chain */
     call_stack_t replyNext;
 
+#ifdef CONFIG_CORE_TAGGED_OBJECT
+    /* Unused when SMP is not enabled (default set to zero) */
+    word_t tcbAffinity;
+
+    /* Unused, explicit padding to make struct size the correct power of 2. */
+    word_t unused1;
+    word_t unused2;
+    word_t unused3;
+#endif
+
     /* Unused, explicit padding to make struct size the correct power of 2. */
     word_t lock;
 };
