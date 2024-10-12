@@ -504,9 +504,11 @@ exception_t receiveCoreLocalIPC(tcb_t *thread, cap_t cap, bool_t isBlocking, cap
     reply_t *replyPtr = NULL;
     if (cap_get_capType(replyCap) == cap_reply_cap) {
         replyPtr = REPLY_PTR(cap_reply_cap_get_capReplyPtr(replyCap));
+/*
 #ifdef CONFIG_FINE_GRAINED_LOCKING
         reply_object_lock_acquire(replyPtr, "receiveIPC");
 #endif
+*/
         if (unlikely(replyPtr->replyTCB != NULL && replyPtr->replyTCB != thread)) {
             userError("Reply object already has unexecuted reply!");
             cancelIPC(replyPtr->replyTCB);
@@ -663,12 +665,13 @@ exception_t receiveCoreLocalIPC(tcb_t *thread, cap_t cap, bool_t isBlocking, cap
 	// XXX
         /* ep_lock_release(epptr); */
     }
+/*
 #ifdef CONFIG_FINE_GRAINED_LOCKING
     if (replyPtr) {
         reply_object_lock_release(replyPtr, "receiveIPC");
     }
 #endif
-
+*/
     return EXCEPTION_NONE;
 }
 #endif

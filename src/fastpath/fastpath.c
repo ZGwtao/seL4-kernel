@@ -344,15 +344,17 @@ void NORETURN fastpath_reply_recv(word_t cptr, word_t msgInfo)
 #ifdef CONFIG_KERNEL_MCS
     /* Get the reply address */
     reply_t *reply_ptr = REPLY_PTR(cap_reply_cap_get_capReplyPtr(reply_cap));
+/*
     if (!reply_object_lock_try_acquire(reply_ptr)) {
         slowpath(SysReplyRecv);
     }
+*/
     /* check that its valid and at the head of the call chain
        and that the current thread's SC is going to be donated. */
     if (unlikely(reply_ptr->replyTCB == NULL ||
                  call_stack_get_isHead(reply_ptr->replyNext) == 0 ||
                  SC_PTR(call_stack_get_callStackPtr(reply_ptr->replyNext)) != NODE_STATE(ksCurThread)->tcbSchedContext)) {
-        reply_object_lock_release(reply_ptr, "fastpath");
+        //reply_object_lock_release(reply_ptr, "fastpath");
         slowpath(SysReplyRecv);
     }
 
@@ -377,14 +379,14 @@ void NORETURN fastpath_reply_recv(word_t cptr, word_t msgInfo)
     /* Check it's an endpoint */
     if (unlikely(!cap_capType_equals(ep_cap, cap_endpoint_cap) ||
                  !cap_endpoint_cap_get_capCanReceive(ep_cap))) {
-        reply_object_lock_release(reply_ptr, "fastpath");
+        //reply_object_lock_release(reply_ptr, "fastpath");
         slowpath(SysReplyRecv);
     }
 
     /* Check there is nothing waiting on the notification */
     if (unlikely(NODE_STATE(ksCurThread)->tcbBoundNotification &&
                  notification_ptr_get_state(NODE_STATE(ksCurThread)->tcbBoundNotification) == NtfnState_Active)) {
-        reply_object_lock_release(reply_ptr, "fastpath");
+        //reply_object_lock_release(reply_ptr, "fastpath");
         slowpath(SysReplyRecv);
     }
 
@@ -393,7 +395,7 @@ void NORETURN fastpath_reply_recv(word_t cptr, word_t msgInfo)
 #ifdef CONFIG_CORE_TAGGED_OBJECT
 #ifdef ENABLE_SMP_SUPPORT
     if (unlikely(!coreCheckPreIPC(NODE_STATE(ksCurThread), ep_ptr))) {
-        reply_object_lock_release(reply_ptr, "fastpath");
+        //reply_object_lock_release(reply_ptr, "fastpath");
         userError("Receive on a core-tagged endpoint with mismatched core affinity!");
         fail("core mismatch");
     }
@@ -407,7 +409,7 @@ void NORETURN fastpath_reply_recv(word_t cptr, word_t msgInfo)
 #ifndef CONFIG_CORE_TAGGED_OBJECT
         ep_lock_release(ep_ptr);
 #endif
-        reply_object_lock_release(reply_ptr, "fastpath");
+        //reply_object_lock_release(reply_ptr, "fastpath");
         slowpath(SysReplyRecv);
     }
 
@@ -417,7 +419,7 @@ void NORETURN fastpath_reply_recv(word_t cptr, word_t msgInfo)
 #ifndef CONFIG_CORE_TAGGED_OBJECT
         ep_lock_release(ep_ptr);
 #endif
-        reply_object_lock_release(reply_ptr, "fastpath");
+        //reply_object_lock_release(reply_ptr, "fastpath");
         slowpath(SysReplyRecv);
     }
 #endif
@@ -432,7 +434,7 @@ void NORETURN fastpath_reply_recv(word_t cptr, word_t msgInfo)
 #ifndef CONFIG_CORE_TAGGED_OBJECT
         ep_lock_release(ep_ptr);
 #endif
-        reply_object_lock_release(reply_ptr, "fastpath");
+        //reply_object_lock_release(reply_ptr, "fastpath");
         slowpath(SysReplyRecv);
     }
 #else
@@ -452,7 +454,7 @@ void NORETURN fastpath_reply_recv(word_t cptr, word_t msgInfo)
 #ifndef CONFIG_CORE_TAGGED_OBJECT
         ep_lock_release(ep_ptr);
 #endif
-        reply_object_lock_release(reply_ptr, "fastpath");
+        //reply_object_lock_release(reply_ptr, "fastpath");
         slowpath(SysReplyRecv);
     }
 
@@ -477,7 +479,7 @@ void NORETURN fastpath_reply_recv(word_t cptr, word_t msgInfo)
 #ifndef CONFIG_CORE_TAGGED_OBJECT
         ep_lock_release(ep_ptr);
 #endif
-        reply_object_lock_release(reply_ptr, "fastpath");
+        //reply_object_lock_release(reply_ptr, "fastpath");
         slowpath(SysReplyRecv);
     }
 #ifdef CONFIG_ARM_HYPERVISOR_SUPPORT
@@ -486,7 +488,7 @@ void NORETURN fastpath_reply_recv(word_t cptr, word_t msgInfo)
 #ifndef CONFIG_CORE_TAGGED_OBJECT
         ep_lock_release(ep_ptr);
 #endif
-        reply_object_lock_release(reply_ptr, "fastpath");
+        //reply_object_lock_release(reply_ptr, "fastpath");
         slowpath(SysReplyRecv);
     }
 
@@ -507,7 +509,7 @@ void NORETURN fastpath_reply_recv(word_t cptr, word_t msgInfo)
 #ifndef CONFIG_CORE_TAGGED_OBJECT
         ep_lock_release(ep_ptr);
 #endif
-        reply_object_lock_release(reply_ptr, "fastpath");
+        //reply_object_lock_release(reply_ptr, "fastpath");
         slowpath(SysReplyRecv);
     }
 
@@ -517,7 +519,7 @@ void NORETURN fastpath_reply_recv(word_t cptr, word_t msgInfo)
 #ifndef CONFIG_CORE_TAGGED_OBJECT
         ep_lock_release(ep_ptr);
 #endif
-        reply_object_lock_release(reply_ptr, "fastpath");
+        //reply_object_lock_release(reply_ptr, "fastpath");
         slowpath(SysReplyRecv);
     }
 #endif
@@ -527,7 +529,7 @@ void NORETURN fastpath_reply_recv(word_t cptr, word_t msgInfo)
 #ifndef CONFIG_CORE_TAGGED_OBJECT
         ep_lock_release(ep_ptr);
 #endif
-        reply_object_lock_release(reply_ptr, "fastpath");
+        //reply_object_lock_release(reply_ptr, "fastpath");
         slowpath(SysReplyRecv);
     }
 
@@ -536,7 +538,7 @@ void NORETURN fastpath_reply_recv(word_t cptr, word_t msgInfo)
 #ifndef CONFIG_CORE_TAGGED_OBJECT
         ep_lock_release(ep_ptr);
 #endif
-        reply_object_lock_release(reply_ptr, "fastpath");
+        //reply_object_lock_release(reply_ptr, "fastpath");
         slowpath(SysReplyRecv);
     }
 #endif
@@ -547,7 +549,7 @@ void NORETURN fastpath_reply_recv(word_t cptr, word_t msgInfo)
 #ifndef CONFIG_CORE_TAGGED_OBJECT
         ep_lock_release(ep_ptr);
 #endif
-        reply_object_lock_release(reply_ptr, "fastpath");
+        //reply_object_lock_release(reply_ptr, "fastpath");
         slowpath(SysReplyRecv);
     }
 #endif /* ENABLE_SMP_SUPPORT */
@@ -636,7 +638,7 @@ void NORETURN fastpath_reply_recv(word_t cptr, word_t msgInfo)
     callerSlot->cap = cap_null_cap_new();
     callerSlot->cteMDBNode = nullMDBNode;
 #endif
-    reply_object_lock_release(reply_ptr, "fastpath");
+    //reply_object_lock_release(reply_ptr, "fastpath");
 
 #ifdef CONFIG_EXCEPTION_FASTPATH
     if (unlikely(fault_type != seL4_Fault_NullFault)) {
