@@ -175,7 +175,7 @@ void doIPCTransfer(tcb_t *sender, endpoint_t *endpoint,
                    word_t badge, bool_t grant, tcb_t *receiver);
 #ifdef CONFIG_KERNEL_MCS
 #ifdef CONFIG_CORE_TAGGED_OBJECT
-void doCoreLocalReplyTransfer(tcb_t *sender, reply_t *reply, bool_t grant)
+void doCoreLocalReplyTransfer(tcb_t *sender, reply_t *reply, bool_t grant);
 #endif
 void doReplyTransfer(tcb_t *sender, reply_t *reply, bool_t grant);
 #else
