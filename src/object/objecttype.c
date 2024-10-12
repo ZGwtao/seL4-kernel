@@ -618,8 +618,8 @@ void performObjectCoreTagging(object_t t, cap_t cap, word_t coreIndex)
         reply_t *reply;
         reply = REPLY_PTR(cap_reply_cap_get_capReplyPtr(cap));
 
-	/* tcbAffinity -> reply object are not referred by generated interfaces */
-        reply->tcbAffinity = coreIndex;
+	/* coreAffinity -> reply object are not referred by generated interfaces */
+        reply->coreAffinity = coreIndex;
         break;
     }
 
