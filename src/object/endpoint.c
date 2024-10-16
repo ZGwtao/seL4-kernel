@@ -214,6 +214,13 @@ exception_t sendCoreLocalIPC(bool_t blocking, bool_t do_call, word_t badge,
         /* Haskell error "Receive endpoint queue must not be empty" */
         assert(dest);
 
+        reply_t *reply = REPLY_PTR(thread_state_get_replyObject(dest->tcbState));
+        if (reply) {
+            /* Core-local available only */
+            assert(reply->coreAffinity == thread->tcbAffinity);
+            reply_unlink(reply, dest);
+        }
+
         /* Dequeue the first TCB */
         queue = tcbEPDequeue(dest, queue);
         ep_ptr_set_queue(epptr, queue);
@@ -224,13 +231,6 @@ exception_t sendCoreLocalIPC(bool_t blocking, bool_t do_call, word_t badge,
 
         /* Do the transfer */
         doIPCTransfer(thread, epptr, badge, canGrant, dest);
-
-        reply_t *reply = REPLY_PTR(thread_state_get_replyObject(dest->tcbState));
-        if (reply) {
-            // exlusive so no reply lock is required
-            /* reply_object_lock_acquire(reply, "sendIPC"); */
-            reply_unlink(reply, dest);
-        }
 
         if (do_call ||
             seL4_Fault_ptr_get_seL4_FaultType(&thread->tcbFault) != seL4_Fault_NullFault) {
@@ -504,6 +504,12 @@ exception_t receiveCoreLocalIPC(tcb_t *thread, cap_t cap, bool_t isBlocking, cap
     reply_t *replyPtr = NULL;
     if (cap_get_capType(replyCap) == cap_reply_cap) {
         replyPtr = REPLY_PTR(cap_reply_cap_get_capReplyPtr(replyCap));
+#ifdef CONFIG_CORE_TAGGED_OBJECT
+        if (unlikely(replyPtr->coreAffinity != thread->tcbAffinity)) {
+            userError("Fail to receive on a core-tagged endpoint with wrong tagged reply object!");
+            fail("core mismatch");
+        }
+#endif
 /*
 #ifdef CONFIG_FINE_GRAINED_LOCKING
         reply_object_lock_acquire(replyPtr, "receiveIPC");
