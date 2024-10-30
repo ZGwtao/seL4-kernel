@@ -466,21 +466,46 @@ static void handleRecv(bool_t isBlocking)
         }
 #ifdef CONFIG_CORE_TAGGED_OBJECT
         if (cap_endpoint_cap_get_capCanTag(ep_cap)) {
-            exception_t exc;
-            exc = receiveCoreLocalIPC(NODE_STATE(ksCurThread),
+            /*
+             * Both active & passive threads can receive
+             * on an endpoint with core-affinity.
+             */
+            exception_t ret;
+            ret = receiveCoreLocalIPC(NODE_STATE(ksCurThread),
                                       ep_cap, isBlocking, reply_cap);
-	    // TODO
-	    if (exc != EXCEPTION_NONE)
-                assert(0);
+            /* Not likely will trigger an error */
+	        if (ret != EXCEPTION_NONE) {
+                fail("Failed to receive on an endpoint with core affinity.\n");
+            }
 
-            break;
+            return;
         }
-#endif
+
+        if (NODE_STATE(ksCurThread)->tcbSchedContext) {
+            /*
+             * Only passive threads are allowed to receive on
+             * normal endpoint, if not, raise an error for the fault
+             * handler to unbind the SchedContext of current thread.
+             */
+            sched_context_t *sc = NODE_STATE(ksCurThread)->tcbSchedContext;
+            reply_t *reply = sc->scReply;
+
+            if (unlikely(reply)) {
+                fail("Try to receive on a new endpoint with borrowed SC.\n");
+            }
+
+            // TODO raise new fault here
+            NODE_STATE(ksCurFault) = NULL;
+            handleFault(NODE_STATE(ksCurThread));
+
+            return;
+        }
+#endif /* CONFIG_CORE_TAGGED_OBJECT */
         receiveIPC(NODE_STATE(ksCurThread), ep_cap, isBlocking, reply_cap);
 #else
         deleteCallerCap(NODE_STATE(ksCurThread));
         receiveIPC(NODE_STATE(ksCurThread), lu_ret.cap, isBlocking);
-#endif
+#endif /* CONFIG_KERNEL_MCS */
         break;
 
     case cap_notification_cap: {
