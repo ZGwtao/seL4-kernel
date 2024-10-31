@@ -236,6 +236,12 @@ exception_t sendCoreLocalIPC(bool_t blocking, bool_t do_call, word_t badge,
             seL4_Fault_ptr_get_seL4_FaultType(&thread->tcbFault) != seL4_Fault_NullFault) {
             if (reply != NULL && (canGrant || canGrantReply)) {
                 reply_push(thread, dest, reply, canDonate);
+#ifdef CONFIG_CORE_TAGGED_OBJECT
+                seL4_Word ft = seL4_Fault_get_seL4_FaultType(thread->tcbFault);
+                if (ft == seL4_Fault_ActiveRecvFault) {
+                    setThreadState(thread, ThreadState_BlockedOnUnbind);
+                }
+#endif
             } else {
                 setThreadState(thread, ThreadState_Inactive);
             }
@@ -641,15 +647,27 @@ exception_t receiveCoreLocalIPC(tcb_t *thread, cap_t cap, bool_t isBlocking, cap
 
             if (do_call ||
                 seL4_Fault_get_seL4_FaultType(sender->tcbFault) != seL4_Fault_NullFault) {
+                // TODO
+                /*
+                 * Sender on receivePhase for fault handling is the thread that faulted,
+                 * if the fault type equals to activeRecvFault, special treatment is
+                 * required to unblock the target thread.
+                 */
                 if ((canGrant || canGrantReply) && replyPtr != NULL) {
-                    bool_t canDonate = sender->tcbSchedContext != NULL
-                                       && seL4_Fault_get_seL4_FaultType(sender->tcbFault) != seL4_Fault_Timeout;
+                    seL4_Word ft = seL4_Fault_get_seL4_FaultType(sender->tcbFault);
+                    bool_t canDonate = sender->tcbSchedContext != NULL && ft != seL4_Fault_Timeout;
 #ifdef CONFIG_FINE_GRAINED_LOCKING
                     scheduler_lock_acquire(sender->tcbAffinity);
 #endif
                     reply_push(sender, thread, replyPtr, canDonate);
 #ifdef CONFIG_FINE_GRAINED_LOCKING
                     scheduler_lock_release(sender->tcbAffinity);
+#endif
+#ifdef CONFIG_CORE_TAGGED_OBJECT
+                    if (ft == seL4_Fault_ActiveRecvFault) {
+                        // TODO
+                        fail("Required fault handling for activeRecvFault.\n");
+                    }
 #endif
                 } else {
                     setThreadState(sender, ThreadState_Inactive);

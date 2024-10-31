@@ -494,8 +494,7 @@ static void handleRecv(bool_t isBlocking)
                 fail("Try to receive on a new endpoint with borrowed SC.\n");
             }
 
-            // TODO raise new fault here
-            NODE_STATE(ksCurFault) = NULL;
+            NODE_STATE(ksCurFault) = seL4_Fault_ActiveRecvFault_new();
             handleFault(NODE_STATE(ksCurThread));
 
             return;

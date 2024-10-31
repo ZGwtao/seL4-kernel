@@ -35,6 +35,27 @@ bool_t sendFaultIPC(tcb_t *tptr, cap_t handlerCap, bool_t can_donate)
                cap_endpoint_cap_get_capCanGrantReply(handlerCap));
 
         tptr->tcbFault = NODE_STATE(ksCurFault);
+#ifdef CONFIG_CORE_TAGGED_OBJECT
+        if (cap_endpoint_cap_get_capCanTag(handlerCap)) {
+            exception_t ret;
+            /* send core-local IPC */
+            ret = \
+                sendCoreLocalIPC(true, false,
+                    cap_endpoint_cap_get_capEPBadge(handlerCap),
+                    cap_endpoint_cap_get_capCanGrant(handlerCap),
+                    cap_endpoint_cap_get_capCanGrantReply(handlerCap),
+                    can_donate, tptr,
+                    EP_PTR(cap_endpoint_cap_get_capEPPtr(handlerCap)));
+            // TODO error handling
+            return true;
+        }
+
+        /* specify faults other than activeRecvFault */
+        if (seL4_Fault_get_seL4_FaultType(tptr->tcbFault) == seL4_Fault_ActiveRecvFault) {
+            // TODO error handling
+            fail("ActiveRecvFault handler must be active on core-tagged endpoint.\n");
+        }
+#endif
         sendIPC(true, false,
                 cap_endpoint_cap_get_capEPBadge(handlerCap),
                 cap_endpoint_cap_get_capCanGrant(handlerCap),
@@ -132,6 +153,11 @@ static void print_fault(seL4_Fault_t f)
     case seL4_Fault_Timeout:
         printf("Timeout fault for 0x%x\n", (unsigned int) seL4_Fault_Timeout_get_badge(f));
         break;
+#ifdef CONFIG_CORE_TAGGED_OBJECT
+    case seL4_Fault_ActiveRecvFault:
+        printf("active thread receive fault");
+        break;
+#endif
 #endif
     default:
         printf("unknown fault");
