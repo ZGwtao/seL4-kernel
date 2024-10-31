@@ -171,6 +171,9 @@ enum _thread_state {
 #ifdef CONFIG_VTX
     ThreadState_RunningVM,
 #endif
+#ifdef CONFIG_CORE_TAGGED_OBJECT
+    ThreadState_BlockedOnUnbind,
+#endif
     ThreadState_IdleThreadState
 };
 typedef word_t _thread_state_t;
