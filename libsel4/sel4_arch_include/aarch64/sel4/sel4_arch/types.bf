@@ -24,6 +24,14 @@ block NullFault {
     field seL4_FaultType 4
 }
 
+#ifdef CONFIG_CORE_TAGGED_OBJECT
+block ActiveRecvFault {
+    padding 832
+    padding 60
+    field seL4_FaultType 4
+}
+#endif
+
 block CapFault {
     padding 384
     field IP   64

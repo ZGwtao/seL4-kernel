@@ -429,6 +429,15 @@ block UserException {
     field seL4_FaultType 4
 }
 
+#ifdef CONFIG_CORE_TAGGED_OBJECT
+block ActiveRecvFault {
+    padding 64
+
+    padding 60
+    field seL4_FaultType 4
+}
+#endif
+
 #ifdef CONFIG_HARDWARE_DEBUG_API
 block DebugException {
     field breakpointAddress 64

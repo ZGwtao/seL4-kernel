@@ -25,6 +25,13 @@ tagged_union seL4_Fault seL4_FaultType {
     tag VGICMaintenance 7
     tag VCPUFault 8
     tag VPPIEvent 9
+#ifdef CONFIG_CORE_TAGGED_OBJECT
+    tag ActiveRecvFault 10
+#endif
+#else
+#ifdef CONFIG_CORE_TAGGED_OBJECT
+    tag ActiveRecvFault 7
+#endif
 #endif
 #else
     -- arch specific faults
