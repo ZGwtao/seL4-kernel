@@ -229,6 +229,12 @@ word_t setMRs_fault(tcb_t *sender, tcb_t *receiver, word_t *receiveIPCBuffer)
             return len;
         }
     }
+#ifdef CONFIG_CORE_TAGGED_OBJECT
+    case seL4_Fault_ActiveRecvFault: {
+        /* No data has to be transferred */
+        return 0;
+    }
+#endif
 #endif
 #ifdef CONFIG_HARDWARE_DEBUG_API
     case seL4_Fault_DebugException: {
