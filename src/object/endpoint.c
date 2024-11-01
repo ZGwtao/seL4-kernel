@@ -665,8 +665,8 @@ exception_t receiveCoreLocalIPC(tcb_t *thread, cap_t cap, bool_t isBlocking, cap
 #endif
 #ifdef CONFIG_CORE_TAGGED_OBJECT
                     if (ft == seL4_Fault_ActiveRecvFault) {
-                        // TODO
-                        fail("Required fault handling for activeRecvFault.\n");
+                        /* Once rendezvous, mark the sender as BlockedOnUnbind */
+                        setThreadState(sender, ThreadState_BlockedOnUnbind);
                     }
 #endif
                 } else {
