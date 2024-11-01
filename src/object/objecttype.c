@@ -772,6 +772,24 @@ exception_t decodeInvocation(word_t invLabel, word_t length,
     case cap_reply_cap:
         setThreadState(NODE_STATE(ksCurThread), ThreadState_Restart);
 #ifdef CONFIG_CORE_TAGGED_OBJECT
+        /* Code should be refined here! */
+        if (invLabel == SchedContextUnbind) {
+            // TODO: error handling
+            reply_t *reply = REPLY_PTR(cap_reply_cap_get_capReplyPtr(cap));
+
+            /* The faulted thread must be valid. */
+            assert(reply->replyTCB);
+            tcb_t *faultTCB = reply->replyTCB;
+
+            /* The faulted thread is active and yet to unbind */
+            assert(faultTCB->tcbSchedContext);
+            sched_context_t *sc = faultTCB->tcbSchedContext;
+
+            /* Try to unbind SchedContext from the faulted thread */
+            schedContext_unbindTCB(sc, faultTCB);
+
+            return EXCEPTION_NONE;
+        }
         return performInvocation_Reply(
                    NODE_STATE(ksCurThread), cap_reply_cap_get_capCanTag(cap),
                    REPLY_PTR(cap_reply_cap_get_capReplyPtr(cap)),
