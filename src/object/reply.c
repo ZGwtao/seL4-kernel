@@ -89,7 +89,8 @@ void reply_pop(reply_t *reply, tcb_t *tcb)
 void reply_remove(reply_t *reply, tcb_t *tcb)
 {
     assert(reply->replyTCB == tcb);
-    assert(thread_state_get_tsType(tcb->tcbState) == ThreadState_BlockedOnReply);
+    assert(thread_state_get_tsType(tcb->tcbState) == ThreadState_BlockedOnReply ||
+           thread_state_get_tsType(tcb->tcbState) == ThreadState_BlockedOnUnbind);
     assert(thread_state_get_replyObject(tcb->tcbState) == REPLY_REF(reply));
 
     word_t next_ptr = call_stack_get_callStackPtr(reply->replyNext);

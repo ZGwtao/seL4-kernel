@@ -29,6 +29,7 @@ static inline void ep_ptr_set_queue(endpoint_t *epptr, tcb_queue_t queue)
 #ifdef CONFIG_KERNEL_MCS
 #ifdef CONFIG_CORE_TAGGED_OBJECT
 bool_t coreCheckPreIPC(tcb_t *thread, endpoint_t *epptr);
+void restoreRecvIPC(tcb_t *thread, endpoint_t *ep, bool_t isBlocking, reply_t *reply);
 /* stripped-down version for core-tagged endpoint */
 exception_t sendCoreLocalIPC(bool_t blocking, bool_t do_call, word_t badge,
                              bool_t canGrant, bool_t canGrantReply, bool_t canDonate,

@@ -128,7 +128,7 @@ void doIPCTransfer(tcb_t *sender, endpoint_t *endpoint, word_t badge,
 void doReplyTransfer(tcb_t *sender, reply_t *reply, bool_t grant)
 #else
 void doReplyTransfer(tcb_t *sender, tcb_t *receiver, cte_t *slot, bool_t grant)
-#endif
+#endif /* CONFIG_KERNEL_MCS */
 {
 #ifdef CONFIG_FINE_GRAINED_LOCKING
     reply_object_lock_acquire(reply, "doReplyTransfer");
@@ -212,6 +212,23 @@ void doReplyTransfer(tcb_t *sender, tcb_t *receiver, cte_t *slot, bool_t grant)
 }
 
 #ifdef CONFIG_CORE_TAGGED_OBJECT
+static void doReplySchedContextUnbind(tcb_t *receiver)
+{
+    assert(receiver->tcbSchedContext == NULL);
+    sched_context_t *sc = receiver->tcbSchedContext;
+    if (sc) {
+        /* Nothing to do as it's yet to unbind */
+        fail("Unhandled cornor case for SchedUnbind on fault.\n");
+        return;
+    }
+    assert(receiver->activeRecvEndpoint);
+    assert(receiver->activeRecvReply);
+    assert(receiver->activeRecvIsBlocking);
+    // TODO: check reply object availability at first phase not here.
+    restoreRecvIPC(receiver,
+        receiver->activeRecvEndpoint, receiver->activeRecvIsBlocking, receiver->activeRecvReply);
+}
+
 void doCoreLocalReplyTransfer(tcb_t *sender, reply_t *reply, bool_t grant)
 {
     /* Only core-local reply is allowed */
@@ -220,8 +237,11 @@ void doCoreLocalReplyTransfer(tcb_t *sender, reply_t *reply, bool_t grant)
         return;
     }
 
+    seL4_Word snapshot;
+    /* Once acknowledged, handle afterwards */
+    snapshot = thread_state_get_tsType(reply->replyTCB->tcbState);
     if (reply->replyTCB == NULL ||
-        thread_state_get_tsType(reply->replyTCB->tcbState) != ThreadState_BlockedOnReply) {
+        (snapshot != ThreadState_BlockedOnReply && snapshot != ThreadState_BlockedOnUnbind)) {
         /* nothing to do */
         return;
     }
@@ -267,6 +287,12 @@ void doCoreLocalReplyTransfer(tcb_t *sender, reply_t *reply, bool_t grant)
 #ifdef CONFIG_FINE_GRAINED_LOCKING
         scheduler_lock_release(receiver->tcbAffinity);
 #endif
+    }
+
+    /* restore IPC and wake up the faulted thread */
+    if (snapshot == ThreadState_BlockedOnUnbind) {
+        /* Second phase of schedContext unbind for active receiver */
+        doReplySchedContextUnbind(receiver);
     }
 }
 #endif

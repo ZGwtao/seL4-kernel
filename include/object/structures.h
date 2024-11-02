@@ -280,6 +280,16 @@ struct tcb {
 
     /* scheduling context that this tcb yielded to */
     sched_context_t *tcbYieldTo;
+#ifdef CONFIG_CORE_TAGGED_OBJECT
+    /* last endpoint to receive on as an active thread */
+    endpoint_t *activeRecvEndpoint;
+
+    /* reply object restored for SchedContext unbound */
+    reply_t *activeRecvReply;
+
+    /* receive state in restoring context */
+    bool_t activeRecvIsBlocking;
+#endif
 #else
     /* Timeslice remaining, 1 word */
     word_t tcbTimeSlice;

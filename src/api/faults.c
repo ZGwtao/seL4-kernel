@@ -135,6 +135,11 @@ bool_t handleFaultReply(tcb_t *receiver, tcb_t *sender)
     case seL4_Fault_Timeout:
         copyMRsFaultReply(sender, receiver, MessageID_TimeoutReply, MIN(length, n_timeoutMessage));
         return (label == 0);
+#ifdef CONFIG_CORE_TAGGED_OBJECT
+    // FIXME
+    case seL4_Fault_ActiveRecvFault:
+        return true;
+#endif
 #endif
 #ifdef CONFIG_HARDWARE_DEBUG_API
     case seL4_Fault_DebugException: {

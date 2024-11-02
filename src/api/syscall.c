@@ -494,6 +494,22 @@ static void handleRecv(bool_t isBlocking)
                 fail("Try to receive on a new endpoint with borrowed SC.\n");
             }
 
+            tcb_t *ft = NODE_STATE(ksCurThread);
+            /* finish the last unbind operation */
+            if (ft->activeRecvEndpoint) {
+                assert(ft->activeRecvEndpoint == EP_PTR(cap_endpoint_cap_get_capEPPtr(ep_cap)));
+            } else {
+                ft->activeRecvEndpoint = EP_PTR(cap_endpoint_cap_get_capEPPtr(ep_cap));
+            }
+            /* finish the last unbind operation */
+            if (ft->activeRecvReply) {
+                assert(ft->activeRecvReply == REPLY_PTR(cap_reply_cap_get_capReplyPtr(reply_cap)));
+                assert(ft->activeRecvIsBlocking == isBlocking);
+            } else {
+                ft->activeRecvReply = REPLY_PTR(cap_reply_cap_get_capReplyPtr(reply_cap));
+                ft->activeRecvIsBlocking = isBlocking;
+            }
+
             NODE_STATE(ksCurFault) = seL4_Fault_ActiveRecvFault_new();
             handleFault(NODE_STATE(ksCurThread));
 
