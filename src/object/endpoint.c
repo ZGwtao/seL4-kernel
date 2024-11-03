@@ -115,9 +115,11 @@ void sendIPC(bool_t blocking, bool_t do_call, word_t badge,
         assert(dest->tcbSchedContext == NULL || refill_sufficient(dest->tcbSchedContext, 0));
         assert(dest->tcbSchedContext == NULL || refill_ready(dest->tcbSchedContext));
         setThreadState(dest, ThreadState_Running);
-        if (sc_sporadic(dest->tcbSchedContext) && dest->tcbSchedContext != NODE_STATE(ksCurSC)) {
-            refill_unblock_check(dest->tcbSchedContext);
-        }
+        // XXX
+        //
+        //if (sc_sporadic(dest->tcbSchedContext) && dest->tcbSchedContext != NODE_STATE(ksCurSC)) {
+        //    refill_unblock_check(dest->tcbSchedContext);
+        //}
 #ifdef CONFIG_FINE_GRAINED_LOCKING
         scheduler_lock_acquire(dest->tcbAffinity);
 #endif
@@ -578,13 +580,18 @@ void receiveIPC(tcb_t *thread, cap_t cap, bool_t isBlocking)
                  * to reduce the cost of proving this to be true as a
                  * short-term stop-gap. */
                 assert(sender->tcbSchedContext != NODE_STATE(ksCurSC));
-                if (sender->tcbSchedContext != NODE_STATE(ksCurSC)) {
+                // XXX
+                //  ==> ksCurSC should be NULL?
+                //if (sender->tcbSchedContext != NODE_STATE(ksCurSC)) {
                     refill_unblock_check(sender->tcbSchedContext);
-                }
+                //}
             }
 
-            if (do_call ||
-                seL4_Fault_get_seL4_FaultType(sender->tcbFault) != seL4_Fault_NullFault) {
+            // Normal calls will get blocked ?
+            assert(do_call ||
+                   seL4_Fault_get_seL4_FaultType(sender->tcbFault) != seL4_Fault_NullFault);
+            //if (do_call ||
+            //    seL4_Fault_get_seL4_FaultType(sender->tcbFault) != seL4_Fault_NullFault) {
                 if ((canGrant || canGrantReply) && replyPtr != NULL) {
                     bool_t canDonate = sender->tcbSchedContext != NULL
                                        && seL4_Fault_get_seL4_FaultType(sender->tcbFault) != seL4_Fault_Timeout;
@@ -598,6 +605,7 @@ void receiveIPC(tcb_t *thread, cap_t cap, bool_t isBlocking)
                 } else {
                     setThreadState(sender, ThreadState_Inactive);
                 }
+/* =================
             } else {
                 setThreadState(sender, ThreadState_Running);
 #ifdef CONFIG_FINE_GRAINED_LOCKING
@@ -608,7 +616,8 @@ void receiveIPC(tcb_t *thread, cap_t cap, bool_t isBlocking)
                 scheduler_lock_release(sender->tcbAffinity);
 #endif
                 assert(sender->tcbSchedContext == NULL || refill_sufficient(sender->tcbSchedContext, 0));
-            }
+  ================== */
+            //}
 #else
             if (do_call) {
                 if (canGrant || canGrantReply) {
