@@ -304,9 +304,9 @@ void restoreRecvIPC(tcb_t *thread, endpoint_t *ep, bool_t isBlocking, reply_t *r
         cancelIPC(replyPtr->replyTCB);
     }
 
-    // TODO: ntfn
-
+#ifdef CONFIG_FINE_GRAINED_LOCKING
     ep_lock_acquire(epptr);
+#endif
 
     switch (endpoint_ptr_get_state(epptr)) {
     case EPState_Idle:
