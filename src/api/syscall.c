@@ -498,16 +498,18 @@ static void handleRecv(bool_t isBlocking)
             /* finish the last unbind operation */
             if (ft->activeRecvEndpoint) {
                 assert(ft->activeRecvEndpoint == EP_PTR(cap_endpoint_cap_get_capEPPtr(ep_cap)));
+                assert(ft->activeRecvIsBlocking == isBlocking);
             } else {
                 ft->activeRecvEndpoint = EP_PTR(cap_endpoint_cap_get_capEPPtr(ep_cap));
+                ft->activeRecvIsBlocking = isBlocking;
             }
             /* finish the last unbind operation */
             if (ft->activeRecvReply) {
                 assert(ft->activeRecvReply == REPLY_PTR(cap_reply_cap_get_capReplyPtr(reply_cap)));
-                assert(ft->activeRecvIsBlocking == isBlocking);
             } else {
-                ft->activeRecvReply = REPLY_PTR(cap_reply_cap_get_capReplyPtr(reply_cap));
-                ft->activeRecvIsBlocking = isBlocking;
+                if (canReply) {
+                    ft->activeRecvReply = REPLY_PTR(cap_reply_cap_get_capReplyPtr(reply_cap));
+                }
             }
 
             NODE_STATE(ksCurFault) = seL4_Fault_ActiveRecvFault_new();
