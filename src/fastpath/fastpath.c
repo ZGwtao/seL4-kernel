@@ -14,7 +14,8 @@
 #include <benchmark/benchmark_utilisation.h>
 
 #ifdef CONFIG_CORE_TAGGED_OBJECT
-static void fastpath_call_local(cap_t ep_cap, word_t length)
+static inline FORCE_INLINE
+void fastpath_call_local(cap_t ep_cap, word_t length)
 {
     endpoint_t *ep_ptr;
     tcb_t *dest;
@@ -181,7 +182,8 @@ static void fastpath_call_local(cap_t ep_cap, word_t length)
 }
 #endif /* CONFIG_CORE_TAGGED_OBJECT */
 
-static void fastpath_call_normal(cap_t ep_cap, word_t length)
+static inline FORCE_INLINE
+void fastpath_call_normal(cap_t ep_cap, word_t length)
 {
     endpoint_t *ep_ptr;
     tcb_t *dest;
@@ -443,7 +445,8 @@ void NORETURN fastpath_call(word_t cptr, word_t msgInfo)
 }
 
 #ifdef CONFIG_CORE_TAGGED_OBJECT
-static inline void NORETURN fastpath_reply_recv_local(cap_t ep_cap, cap_t reply_cap, word_t length, seL4_MessageInfo_t info)
+static inline FORCE_INLINE
+void NORETURN fastpath_reply_recv_local(cap_t ep_cap, cap_t reply_cap, word_t length, seL4_MessageInfo_t info)
 {
     endpoint_t *ep_ptr;
     tcb_t *caller;
@@ -681,9 +684,11 @@ static inline void NORETURN fastpath_reply_recv_local(cap_t ep_cap, cap_t reply_
 #endif
 
 #ifdef CONFIG_KERNEL_MCS
-static inline void NORETURN fastpath_reply_recv_normal(cap_t ep_cap, cap_t reply_cap, word_t length, seL4_MessageInfo_t info)
+static inline FORCE_INLINE
+void NORETURN fastpath_reply_recv_normal(cap_t ep_cap, cap_t reply_cap, word_t length, seL4_MessageInfo_t info)
 #else
-static inline void NORETURN fastpath_reply_recv_normal(cap_t ep_cap, word_t length, seL4_MessageInfo_t info)
+static inline FORCE_INLINE
+void NORETURN fastpath_reply_recv_normal(cap_t ep_cap, word_t length, seL4_MessageInfo_t info)
 #endif
 {
     endpoint_t *ep_ptr;
